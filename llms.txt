@@ -1,0 +1,28 @@
+# CoNLL-U
+
+> A modern C++ (C++23) header-only library for reading, in-memory manipulation, and writing of [CoNLL-U](https://universaldependencies.org/format.html) formatted treebank data (Universal Dependencies format), including its [CoNLL-U Plus](https://universaldependencies.org/ext-format.html) extension with arbitrary, declared column sets. All public API lives in namespace `tg::conllu`.
+
+Source: https://github.com/tugrulgungor/CoNLL-U
+Homepage: https://conll-u.tugrulgungor.me
+Author: Tuğrul Güngör
+License: MIT (https://opensource.org/license/mit/)
+
+The library is included via the umbrella header `conllu.hpp`, which pulls in all of the headers below. Error reporting throughout the API uses `std::error_code` / `std::expected<T, std::error_code>` rather than exceptions; most member functions are `noexcept`.
+
+## Core headers
+
+- [conllu.hpp](conllu.hpp): Umbrella header that includes every public header (`error.hpp`, `parser.hpp`, `sentence.hpp`, `token.hpp`, `treebank.hpp`, `word.hpp`, `writer.hpp`). Defines the `conllu` Doxygen group.
+- [conllu/treebank.hpp](conllu/treebank.hpp): Defines `Treebank`, the in-memory representation of a full CoNLL-U (or CoNLL-U Plus) treebank. Owns the ordered set of column names and the collection of `Sentence` objects. Because the column set is dynamic rather than fixed to the 10 standard CoNLL-U columns, `Treebank` naturally supports CoNLL-U Plus's declared, extensible columns (`add_column`, `get_column_pos`/`get_column_name`) alongside the standard format. Supports adding/looking up/removing columns and sentences, emptiness checks, structural `validate()`, and `clear()`. Copy/move construction and assignment are disabled — treebanks are managed through pointers/`std::unique_ptr`.
+- [conllu/sentence.hpp](conllu/sentence.hpp): Defines `Sentence`, a single sentence within a `Treebank`. Holds `sent_id`/`text` identity metadata, an arbitrary metadata key/value map, an ordered list of `Token`s, and an ordered list of `Word`s (multiword token groupings). Provides accessors/mutators for tokens, words, and metadata, plus `validate()` and `clear()`. Constructed only via `Treebank::add_sentence`.
+- [conllu/token.hpp](conllu/token.hpp): Defines `Token` (a single token within a `Sentence`, or an empty node within a `Token`) and the `TokenId` alias (`std::uint64_t`). Manages the ID, optional HEAD reference, per-column field values (by position or name), and nested empty nodes. Constructed only via `Sentence::add_token` or `Token::add_empty_node`.
+- [conllu/word.hpp](conllu/word.hpp): Defines `Word`, representing a multiword token: a contiguous span of two or more `Token`s sharing one surface form. Includes the nested `Word::Range` struct (closed inclusive `[first, last]` `TokenId` interval, with `count()`, `contains()`, `overlaps()`, `equals()`, and `is_valid()` helpers). `Word` exposes range, form, MISC, and typo-flag accessors, a view over its covered tokens, and `validate()`. Constructed only via `Sentence::add_word`.
+- [conllu/parser.hpp](conllu/parser.hpp): Defines `ParserOptions` (currently just the empty-value indicator character, default `_`) and `Parser`, which parses CoNLL-U (and CoNLL-U Plus, via an optional leading `# global.columns` declaration line) formatted text into a new `Treebank`. Supports parsing from an `std::istream`, a file path (`parse_file`), an in-memory `std::string_view` (`parse_memory`), or a raw byte buffer. All parsing entry points return `std::expected<std::unique_ptr<Treebank>, std::error_code>`.
+- [conllu/writer.hpp](conllu/writer.hpp): Defines `WriterOptions` (empty-value indicator character, default `_`) and `Writer`, which serializes a `Treebank` back into CoNLL-U formatted output — to an `std::ostream` (`write`) or directly to a file (`write_file`). Returns `std::error_code` describing the first failure, if any.
+- [conllu/error.hpp](conllu/error.hpp): Defines the `ErrorCode` enum used across parsing, writing, and treebank mutation (e.g. `StreamError`, `InsufficientMemory`, `PositionOutOfRange`, `InvalidColumnName`, `DuplicateColumnName`, `MissingSentenceId`, `DuplicateSentenceId`, `InvalidTokenId`, `TokenFieldCountMismatch`, `InvalidTokenHead`, `InvalidWordRange`, `OverlappingWordRange`, and more), plus `ErrorCategory` (the `std::error_category` implementation), `get_error_category()`, and `make_error_code()`. Specializes `std::is_error_code_enum` so `ErrorCode` interoperates with `std::error_code`.
+
+## Notes
+
+- Ownership/friendship: `Treebank`, `Sentence`, `Token`, and `Word` grant friendship to `Parser`, `Writer`, and each other so that construction and mutation stay encapsulated behind the public accessor API.
+- Many accessors are `constexpr` and return views (`std::string_view`, ranges over pointers) rather than owning copies.
+- Column/field access on `Token` works by both position (`std::size_t`) and column name (`std::string_view`).
+- Word lines in the CoNLL-U format may only carry ID, FORM, MISC, and a `Typo=Yes` FEATS flag; this is enforced via `ErrorCode::InvalidWordFieldValue`.

@@ -1,0 +1,7 @@
+.cmake-build
+.dist
+.emscripten-build
+.idea
+.pages
+docs
+single_header

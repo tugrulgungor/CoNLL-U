@@ -1,0 +1,43 @@
+name: release.yml
+on:
+  release:
+    types: [ published ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    if: github.event.release.target_commitish == 'v0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setting up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Installing GTest
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev
+
+      - name: Configuring CMake
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_DOCS=ON -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Running tests (ctest)
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Generating single header
+        working-directory: scripts
+        run: python amalgamate.py
+
+      - name: Attaching single header to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: single_header/conllu.hpp

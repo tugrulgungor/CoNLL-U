@@ -1,0 +1,1000 @@
+<!--
+  ~ CoNLL-U - https://github.com/tugrulgungor/CoNLL-U
+  ~
+  ~ Copyright (c) 2026. All rights reserved.
+  ~ Tuğrul Güngör - https://conll-u.tugrulgungor.me
+  ~
+  ~ Distributed under the MIT License.
+  ~ https://opensource.org/license/mit/
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoNLL-U Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+          rel="stylesheet">
+
+    <script>
+        window.__conlluReady = false;
+        window.Module = window.Module || {};
+        window.Module.onRuntimeInitialized = function () {
+          window.__conlluReady = true;
+          if (window.__onParserReady) window.__onParserReady();
+        };
+    </script>
+    <script src="conllu.js" onerror="window.__conlluScriptMissing = true;"></script>
+
+    <style>
+        :root{
+          --bg: #12161b;
+          --bg-raised: #1a2027;
+          --bg-inset: #0e1116;
+          --line: #2b333b;
+          --line-soft: #232a31;
+          --text: #e7e3d8;
+          --text-dim: #8b9199;
+          --text-faint: #5b636c;
+          --accent: #5fb8ac;
+          --accent-soft: rgba(95, 184, 172, 0.14);
+          --accent-2: #d8a54c;
+          --accent-2-soft: rgba(216, 165, 76, 0.12);
+          --error: #dd6b55;
+          --error-soft: rgba(221, 107, 85, 0.12);
+          --serif: "Source Serif 4", Georgia, serif;
+          --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        *{ box-sizing: border-box; }
+        html, body{ height: 100%; }
+        body{
+          margin: 0;
+          background: var(--bg);
+          color: var(--text);
+          font-family: var(--mono);
+          font-size: 14px;
+          line-height: 1.5;
+          -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3{ font-family: var(--serif); font-weight: 600; margin: 0; }
+
+        button, input{ font-family: inherit; font-size: inherit; color: inherit; }
+
+        :focus-visible{
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+
+        ::-webkit-scrollbar{ width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track{ background: transparent; }
+        ::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover{ background: var(--text-faint); }
+
+        #app{
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+        }
+
+        .topbar{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 14px 20px;
+          border-bottom: 1px solid var(--line);
+          background: var(--bg-raised);
+          flex-shrink: 0;
+        }
+
+        .brand{ display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+        .brand h1{ font-size: 20px; letter-spacing: 0.01em; white-space: nowrap; }
+        .brand .brand-sub{ color: var(--text-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .topbar-actions{ display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+        .status{ color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+        .status.is-error{ color: var(--error); }
+
+        .file-btn{
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          background: var(--accent);
+          color: #0e1116;
+          border-radius: 3px;
+          cursor: pointer;
+          font-weight: 500;
+          border: 1px solid var(--accent);
+          transition: background 120ms ease, transform 120ms ease;
+          white-space: nowrap;
+        }
+        .file-btn:hover{ background: #74c6bb; }
+        .file-btn:active{ transform: translateY(1px); }
+        .file-btn.is-disabled{
+          background: transparent;
+          color: var(--text-faint);
+          border-color: var(--line);
+          cursor: not-allowed;
+        }
+
+        .icon-links{ display: flex; align-items: center; gap: 4px; margin-left: 2px; }
+        .icon-link{
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 3px;
+          color: var(--text-dim);
+          border: 1px solid transparent;
+          text-decoration: none;
+          transition: color 120ms ease, border-color 120ms ease;
+        }
+        .icon-link:hover{ color: var(--accent); border-color: var(--line); }
+
+        main{
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .center-state{
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+        }
+
+        .state-card{
+          max-width: 480px;
+          width: 100%;
+          text-align: left;
+        }
+        .state-card h2{ font-size: 24px; margin-bottom: 10px; }
+        .state-card p{ color: var(--text-dim); margin: 0 0 6px; }
+        .state-card p + p{ margin-top: 10px; }
+
+        .drop-zone{
+          margin-top: 22px;
+          border: 1px dashed var(--line);
+          border-radius: 4px;
+          padding: 28px 20px;
+          text-align: center;
+          color: var(--text-faint);
+          transition: border-color 150ms ease, background 150ms ease;
+        }
+        .drop-zone.is-dragover{
+          border-color: var(--accent);
+          background: var(--accent-soft);
+          color: var(--text);
+        }
+
+        .samples-block{ margin-top: 20px; }
+        .samples-label{ font-size: 12px; color: var(--text-faint); margin: 0 0 8px; }
+        .samples-list{ display: flex; flex-wrap: wrap; gap: 8px; }
+        .sample-btn{
+          background: transparent;
+          border: 1px solid var(--line);
+          color: var(--text-dim);
+          padding: 6px 12px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 12.5px;
+          transition: border-color 120ms ease, color 120ms ease;
+        }
+        .sample-btn:hover{ border-color: var(--accent); color: var(--accent); }
+        .sample-btn.is-loading{ color: var(--accent-2); border-color: var(--accent-2); cursor: wait; }
+
+        .setup-panel code, .error-panel code{
+          display: block;
+          margin-top: 10px;
+          padding: 10px 12px;
+          background: var(--bg-inset);
+          border: 1px solid var(--line);
+          border-radius: 3px;
+          color: var(--accent-2);
+          font-size: 13px;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
+        .error-panel .state-card h2{ color: var(--error); }
+        .error-panel code{ color: var(--error); border-color: var(--error-soft); background: var(--error-soft); }
+
+        .results{
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .stats-bar{
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px 18px;
+          padding: 12px 20px;
+          border-bottom: 1px solid var(--line);
+          background: var(--bg-raised);
+          font-size: 12.5px;
+          color: var(--text-dim);
+          flex-shrink: 0;
+        }
+        .stats-bar .stat strong{ color: var(--text); font-weight: 600; }
+        .stats-bar .columns-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip{
+          padding: 2px 8px;
+          border: 1px solid var(--line);
+          border-radius: 3px;
+          color: var(--text-dim);
+          font-size: 11.5px;
+        }
+        .spacer{ flex: 1; }
+        .ghost-btn{
+          background: transparent;
+          border: 1px solid var(--line);
+          color: var(--text-dim);
+          padding: 6px 12px;
+          border-radius: 3px;
+          cursor: pointer;
+          transition: border-color 120ms ease, color 120ms ease;
+        }
+        .ghost-btn:hover{ border-color: var(--accent); color: var(--accent); }
+
+        .workspace{
+          flex: 1;
+          min-height: 0;
+          display: flex;
+        }
+
+        .sentence-list{
+          width: 300px;
+          flex-shrink: 0;
+          border-right: 1px solid var(--line);
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .sentence-filter-wrap{ padding: 12px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+        #sentenceFilter{
+          width: 100%;
+          background: var(--bg-inset);
+          border: 1px solid var(--line);
+          border-radius: 3px;
+          color: var(--text);
+          padding: 7px 10px;
+        }
+        #sentenceFilter::placeholder{ color: var(--text-faint); }
+
+        #sentenceItems{ flex: 1; overflow-y: auto; }
+
+        .sentence-item{
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: none;
+          border-bottom: 1px solid var(--line-soft);
+          border-left: 2px solid transparent;
+          padding: 10px 14px;
+          cursor: pointer;
+          color: var(--text-dim);
+        }
+        .sentence-item:hover{ background: var(--bg-raised); color: var(--text); }
+        .sentence-item.active{
+          background: var(--accent-soft);
+          border-left-color: var(--accent);
+          color: var(--text);
+        }
+        .sentence-item .idx{ color: var(--text-faint); margin-right: 8px; }
+        .sentence-item.active .idx{ color: var(--accent); }
+        .sentence-item .preview{
+          display: block;
+          margin-top: 3px;
+          font-size: 12.5px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .no-matches{ padding: 16px 14px; color: var(--text-faint); font-size: 12.5px; }
+
+        .detail-panel{
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .detail-header{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 16px 20px 10px;
+          flex-shrink: 0;
+          flex-wrap: wrap;
+        }
+        .detail-header h2{ font-size: 19px; }
+
+        .view-toggle{
+          display: inline-flex;
+          border: 1px solid var(--line);
+          border-radius: 3px;
+          overflow: hidden;
+        }
+        .toggle-btn{
+          background: transparent;
+          border: none;
+          color: var(--text-dim);
+          padding: 6px 14px;
+          cursor: pointer;
+        }
+        .toggle-btn + .toggle-btn{ border-left: 1px solid var(--line); }
+        .toggle-btn.active{ background: var(--accent-soft); color: var(--accent); }
+
+        .metadata-block{
+          padding: 0 20px 10px;
+          flex-shrink: 0;
+        }
+        .metadata-block details{ border: 1px solid var(--line-soft); border-radius: 4px; }
+        .metadata-block summary{
+          cursor: pointer;
+          padding: 7px 12px;
+          font-size: 12.5px;
+          color: var(--text-dim);
+          list-style: none;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          user-select: none;
+        }
+        .metadata-block summary::-webkit-details-marker{ display: none; }
+        .metadata-block summary::before{
+          content: "▸";
+          display: inline-block;
+          font-size: 10px;
+          color: var(--text-faint);
+          transition: transform 120ms ease;
+        }
+        .metadata-block details[open] summary::before{ transform: rotate(90deg); }
+        .metadata-block summary:hover{ color: var(--text); }
+        .metadata-content{
+          max-height: 30vh;
+          overflow-y: auto;
+          padding: 2px 12px 8px;
+          border-top: 1px solid var(--line-soft);
+        }
+        .metadata-row{
+          display: flex;
+          gap: 10px;
+          padding: 3px 0;
+          font-size: 12.5px;
+        }
+        .metadata-row .key{ color: var(--text-dim); flex-shrink: 0; min-width: 90px; }
+        .metadata-row .value{ color: var(--text); word-break: break-word; }
+        .no-metadata{ color: var(--text-faint); font-size: 12.5px; padding: 6px 0; }
+
+        .table-wrap{
+          flex: 1;
+          min-height: 0;
+          overflow: auto;
+          border-top: 1px solid var(--line-soft);
+          margin: 0 20px 18px;
+          border: 1px solid var(--line-soft);
+          border-radius: 4px;
+        }
+
+        table{
+          border-collapse: collapse;
+          width: 100%;
+          font-size: 12.5px;
+        }
+
+        thead th{
+          position: sticky;
+          top: 0;
+          background: var(--bg-raised);
+          color: var(--text-dim);
+          text-align: left;
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--line);
+          white-space: nowrap;
+          font-weight: 500;
+          z-index: 1;
+        }
+
+        tbody td{
+          padding: 6px 12px;
+          border-bottom: 1px solid var(--line-soft);
+          white-space: nowrap;
+          color: var(--text);
+        }
+
+        tbody tr.row-token:hover{ background: var(--bg-raised); }
+
+        tbody tr.row-empty{
+          background: var(--accent-2-soft);
+        }
+        tbody tr.row-empty td{ color: var(--accent-2); font-style: italic; }
+        tbody tr.row-empty td:first-child{
+          border-left: 2px solid var(--accent-2);
+          padding-left: 20px;
+        }
+
+        tbody tr.row-word:hover{ background: var(--bg-raised); }
+
+        @media (max-width: 760px){
+          .topbar{ padding: 12px 14px; }
+          .brand .brand-sub{ display: none; }
+          .status{ display: none; }
+          .stats-bar{ padding: 10px 14px; }
+
+          .workspace{ flex-direction: column; }
+
+          .sentence-list{
+            width: 100%;
+            border-right: none;
+            border-bottom: 1px solid var(--line);
+            max-height: 40vh;
+          }
+
+          .detail-header{ padding: 14px 14px 8px; }
+          .metadata-block{ padding: 0 14px 10px; }
+          .metadata-content{ max-height: 20vh; }
+          .table-wrap{ margin: 0 14px 14px; }
+
+          .state-card{ padding: 0 4px; }
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          *{ transition: none !important; animation: none !important; }
+        }
+
+        [hidden]{ display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+
+    <header class="topbar">
+        <div class="brand">
+            <h1>CoNLL-U Viewer</h1>
+            <span class="brand-sub">reads CoNLL-U and CoNLL-U Plus files</span>
+        </div>
+        <div class="topbar-actions">
+            <span id="statusText" class="status">Loading parser…</span>
+            <label class="file-btn is-disabled" id="fileBtn">
+                <input type="file" id="fileInput" accept=".conllu,.conllup,.conll,.txt" hidden disabled>
+                <span>Open file</span>
+            </label>
+            <div class="icon-links">
+                <a class="icon-link" href="/api" target="_blank" rel="noopener"
+                   title="API docs" aria-label="API docs">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4.5C4 3.7 4.7 3 5.5 3H16a2 2 0 0 1 2 2v14a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2v-14.5Z"/>
+                        <path d="M4 17h14"/>
+                        <path d="M8 8h6"/>
+                        <path d="M8 11h6"/>
+                    </svg>
+                </a>
+                <a class="icon-link" href="https://github.com/tugrulgungor/CoNLL-U" target="_blank" rel="noopener"
+                   title="GitHub repo" aria-label="GitHub repo">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.58 2 12.2c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.5 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.19-1.11-1.51-1.11-1.51-.9-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.05 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.73 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.47.1 2.73.64.72 1.03 1.63 1.03 2.75 0 3.92-2.34 4.79-4.57 5.04.36.32.68.95.68 1.92 0 1.39-.01 2.51-.01 2.85 0 .28.18.6.69.5A10.2 10.2 0 0 0 22 12.2C22 6.58 17.52 2 12 2Z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main id="main">
+
+        <section id="emptyState" class="center-state">
+            <div class="state-card">
+                <h2>No file loaded</h2>
+                <p>Open a CoNLL-U or CoNLL-U Plus file to inspect its sentences, tokens, and annotations.</p>
+                <div class="drop-zone" id="dropZone">Drop a file here, or use "Open file" above</div>
+                <div class="samples-block" id="samplesBlock" hidden>
+                    <p class="samples-label">Or try a sample:</p>
+                    <div class="samples-list" id="samplesList"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="setupPanel" class="center-state" hidden>
+            <div class="state-card setup-panel">
+                <h2>Parser not connected</h2>
+                <p id="setupMessage">This page couldn't find your compiled parser.</p>
+            </div>
+        </section>
+
+        <section id="errorPanel" class="center-state" hidden>
+            <div class="state-card error-panel">
+                <h2>Couldn't parse this file</h2>
+                <p id="errorFileName"></p>
+                <code id="errorMessage"></code>
+            </div>
+        </section>
+
+        <section id="resultsView" class="results" hidden>
+            <div class="stats-bar">
+                <span class="stat"><strong id="statSentences">0</strong> sentences</span>
+                <span class="stat"><strong id="statTokens">0</strong> tokens</span>
+                <span class="stat"><strong id="statParseTime">0 ms</strong> parse time</span>
+                <div class="columns-chips" id="columnsChips"></div>
+                <div class="spacer"></div>
+                <button class="ghost-btn" id="exportBtn">Export JSON</button>
+                <button class="ghost-btn" id="closeBtn">Close</button>
+            </div>
+
+            <div class="workspace">
+                <aside class="sentence-list">
+                    <div class="sentence-filter-wrap">
+                        <input type="search" id="sentenceFilter" placeholder="Filter sentences…">
+                    </div>
+                    <div id="sentenceItems"></div>
+                </aside>
+
+                <div class="detail-panel">
+                    <div class="detail-header">
+                        <h2 id="detailTitle">Sentence</h2>
+                        <div class="view-toggle">
+                            <button class="toggle-btn active" data-view="tokens">Tokens</button>
+                            <button class="toggle-btn" data-view="words">Words</button>
+                        </div>
+                    </div>
+                    <div class="metadata-block" id="metadataBlock"></div>
+                    <div class="table-wrap">
+                        <table id="tokenTable"></table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<script>
+    (function () {
+      'use strict';
+
+      const CONFIG = {
+        factoryName: 'createConlluDemoModule',
+        parseFunctionName: 'parse_conllu_file'
+      };
+
+      const statusText = document.getElementById('statusText');
+      const fileBtn = document.getElementById('fileBtn');
+      const fileInput = document.getElementById('fileInput');
+      const dropZone = document.getElementById('dropZone');
+
+      const emptyState = document.getElementById('emptyState');
+      const samplesBlock = document.getElementById('samplesBlock');
+      const samplesList = document.getElementById('samplesList');
+      const setupPanel = document.getElementById('setupPanel');
+      const setupMessage = document.getElementById('setupMessage');
+      const errorPanel = document.getElementById('errorPanel');
+      const errorFileName = document.getElementById('errorFileName');
+      const errorMessage = document.getElementById('errorMessage');
+      const resultsView = document.getElementById('resultsView');
+
+      const statSentences = document.getElementById('statSentences');
+      const statTokens = document.getElementById('statTokens');
+      const statParseTime = document.getElementById('statParseTime');
+      const columnsChips = document.getElementById('columnsChips');
+      const exportBtn = document.getElementById('exportBtn');
+      const closeBtn = document.getElementById('closeBtn');
+
+      const sentenceFilter = document.getElementById('sentenceFilter');
+      const sentenceItems = document.getElementById('sentenceItems');
+      const detailTitle = document.getElementById('detailTitle');
+      const metadataBlock = document.getElementById('metadataBlock');
+      const tokenTable = document.getElementById('tokenTable');
+      const viewToggleBtns = document.querySelectorAll('.toggle-btn');
+      const tokensToggleBtn = document.querySelector('.toggle-btn[data-view="tokens"]');
+      const wordsToggleBtn = document.querySelector('.toggle-btn[data-view="words"]');
+
+      let ParserModule = null;
+      let currentResult = null;
+      let currentFileName = '';
+      let currentSentenceIdx = 0;
+      let currentView = 'tokens';
+      let visibleIndices = [];
+
+      function show(el){ el.hidden = false; }
+      function hide(el){ el.hidden = true; }
+      function hideAllStates(){
+        hide(emptyState); hide(setupPanel); hide(errorPanel); hide(resultsView);
+      }
+      function setStatus(text, isError){
+        statusText.textContent = text;
+        statusText.classList.toggle('is-error', !!isError);
+      }
+
+      function bootParser() {
+        if (window.__conlluScriptMissing) {
+          return showSetup('The glue script "conllu.js" could not be loaded.');
+        }
+        try {
+          if (typeof window[CONFIG.factoryName] === 'function') {
+            window[CONFIG.factoryName]().then(function (mod) {
+              ParserModule = mod;
+              onParserReady();
+            }).catch(function (err) {
+              showSetup('The parser factory function threw an error while starting.', err);
+            });
+            return;
+          }
+          if (window.__conlluReady && typeof Module !== 'undefined') {
+            ParserModule = Module;
+            onParserReady();
+            return;
+          }
+          window.__onParserReady = function () {
+            ParserModule = Module;
+            onParserReady();
+          };
+          setTimeout(function () {
+            if (!ParserModule) {
+              showSetup('The parser did not finish initializing within 15 seconds.');
+            }
+          }, 15000);
+        } catch (err) {
+          showSetup('Unexpected error while starting the parser.', err);
+        }
+      }
+
+      function onParserReady() {
+        setStatus('Ready — choose a CoNLL-U file');
+        fileBtn.classList.remove('is-disabled');
+        fileInput.disabled = false;
+      }
+
+      function showSetup(message, err) {
+        setStatus('Parser not connected', true);
+        hideAllStates();
+        setupMessage.textContent = message;
+        show(setupPanel);
+      }
+
+      window.addEventListener('load', bootParser);
+      window.addEventListener('load', loadSamples);
+
+      async function loadSamples() {
+        try {
+          const res = await fetch('demo.json');
+          if (!res.ok) return;
+          const samples = await res.json();
+          if (!Array.isArray(samples) || samples.length === 0) return;
+          renderSamples(samples);
+        } catch (err) {
+        }
+      }
+
+      function renderSamples(samples) {
+        samplesList.innerHTML = '';
+        samples.forEach(function (sample) {
+          if (!sample || !sample.name || !sample.file) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'sample-btn';
+          btn.textContent = sample.name;
+          btn.addEventListener('click', function () { loadSampleFile(sample, btn); });
+          samplesList.appendChild(btn);
+        });
+        show(samplesBlock);
+      }
+
+      async function loadSampleFile(sample, btn) {
+        if (!ParserModule) { setStatus('Parser is still loading…'); return; }
+        const originalLabel = btn.textContent;
+        btn.classList.add('is-loading');
+        btn.textContent = 'Loading…';
+        try {
+          const res = await fetch(sample.file);
+          if (!res.ok) throw new Error('Could not fetch "' + sample.file + '" (HTTP ' + res.status + ')');
+          const text = await res.text();
+          const pseudoFile = { name: sample.name, text: function () { return Promise.resolve(text); } };
+          await processFile(pseudoFile);
+        } catch (err) {
+          showError(sample.name, err && err.message ? err.message : String(err));
+        } finally {
+          btn.classList.remove('is-loading');
+          btn.textContent = originalLabel;
+        }
+      }
+
+      function callParser(text) {
+        const fn = CONFIG.parseFunctionName;
+        if (!ParserModule) throw new Error('Parser module is not ready yet.');
+        if (typeof ParserModule[fn] === 'function') {
+          return ParserModule[fn](text);
+        }
+        if (typeof ParserModule.cwrap === 'function') {
+          if (!ParserModule.__cwrapped) ParserModule.__cwrapped = {};
+          if (!ParserModule.__cwrapped[fn]) {
+            ParserModule.__cwrapped[fn] = ParserModule.cwrap(fn, 'string', ['string']);
+          }
+          return ParserModule.__cwrapped[fn](text);
+        }
+        throw new Error('Could not find "' + fn + '" on the parser module. Check CONFIG.parseFunctionName and your Emscripten binding.');
+      }
+
+      async function processFile(file) {
+        if (!ParserModule) { setStatus('Parser is still loading…'); return; }
+        setStatus('Parsing ' + file.name + '…');
+        hideAllStates();
+
+        try {
+          const text = await file.text();
+          const t0 = performance.now();
+          const raw = callParser(text);
+          const parseDurationMs = performance.now() - t0;
+          const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+          if (!result || result.ok !== true) {
+            showError(file.name, (result && result.error) ? result.error : 'Unknown parsing error.');
+            return;
+          }
+          currentFileName = file.name;
+          renderResults(result, parseDurationMs);
+        } catch (err) {
+          showError(file.name, err && err.message ? err.message : String(err));
+        } finally {
+          setStatus('Ready — choose a CoNLL-U file');
+        }
+      }
+
+      function showError(fileName, message) {
+        hideAllStates();
+        errorFileName.textContent = fileName;
+        errorMessage.textContent = message;
+        show(errorPanel);
+      }
+
+      fileInput.addEventListener('change', function () {
+        const file = fileInput.files && fileInput.files[0];
+        if (file) processFile(file);
+        fileInput.value = '';
+      });
+
+      ['dragover', 'dragenter'].forEach(function (evt) {
+        dropZone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          dropZone.classList.add('is-dragover');
+        });
+      });
+      ['dragleave', 'dragend'].forEach(function (evt) {
+        dropZone.addEventListener(evt, function () { dropZone.classList.remove('is-dragover'); });
+      });
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('is-dragover');
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) processFile(file);
+      });
+
+      function padFields(fields, n) {
+        const arr = Array.isArray(fields) ? fields.slice() : [];
+        while (arr.length < n) arr.push('');
+        return arr;
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function formatDuration(ms) {
+        if (ms < 1000) return Math.round(ms) + ' ms';
+        return (ms / 1000).toFixed(2) + ' s';
+      }
+
+      function renderResults(result, parseDurationMs) {
+        currentResult = result;
+        currentSentenceIdx = 0;
+        currentView = 'tokens';
+        viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.view === 'tokens'); });
+
+        const columns = result.columns || [];
+        const sentences = result.sentences || [];
+
+        let tokenCount = 0;
+        sentences.forEach(function (s) {
+          tokenCount += (s.tokens || []).length;
+        });
+
+        statSentences.textContent = sentences.length;
+        statTokens.textContent = tokenCount;
+        statParseTime.textContent = formatDuration(parseDurationMs || 0);
+
+        columnsChips.innerHTML = '';
+        columns.forEach(function (col) {
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.textContent = col;
+          columnsChips.appendChild(chip);
+        });
+
+        sentenceFilter.value = '';
+        renderSentenceList('');
+        if (sentences.length > 0) {
+          selectSentence(0);
+        } else {
+          detailTitle.textContent = 'No sentences found';
+          metadataBlock.innerHTML = '';
+          tokenTable.innerHTML = '';
+        }
+
+        hideAllStates();
+        show(resultsView);
+      }
+
+      function findFormIndex() {
+        if (!currentResult) return 1;
+        const idx = (currentResult.columns || []).indexOf('FORM');
+        return idx >= 0 ? idx : 1;
+      }
+
+      function sentenceLabel(sentence) {
+        const meta = sentence.metadata || [];
+        const textMeta = meta.find(function (m) { return m.key === 'text'; });
+        if (textMeta && textMeta.value) return textMeta.value;
+
+        const formIdx = findFormIndex();
+        const words = sentence.words || [];
+        if (words.length > 0) {
+          return words.map(function (w) { return (w && w[formIdx]) || ''; }).join(' ').trim();
+        }
+        return '';
+      }
+
+      function renderSentenceList(filterText) {
+        const sentences = (currentResult && currentResult.sentences) || [];
+        const needle = (filterText || '').trim().toLowerCase();
+
+        visibleIndices = [];
+        sentenceItems.innerHTML = '';
+
+        sentences.forEach(function (sentence, idx) {
+          const label = sentenceLabel(sentence);
+          if (needle) {
+            const meta = sentence.metadata || [];
+            const hay = (label + ' ' + meta.map(function (m) { return m.key + ' ' + m.value; }).join(' ')).toLowerCase();
+            if (hay.indexOf(needle) === -1) return;
+          }
+          visibleIndices.push(idx);
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'sentence-item' + (idx === currentSentenceIdx ? ' active' : '');
+          btn.dataset.idx = idx;
+          btn.innerHTML =
+            '<span class="idx">' + (idx + 1) + '</span>' +
+            '<span class="preview">' + escapeHtml(label || '(no text metadata)') + '</span>';
+          btn.addEventListener('click', function () { selectSentence(idx); });
+          sentenceItems.appendChild(btn);
+        });
+
+        if (visibleIndices.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'no-matches';
+          empty.textContent = 'No sentences match "' + filterText + '"';
+          sentenceItems.appendChild(empty);
+        }
+      }
+
+      function selectSentence(idx) {
+        currentSentenceIdx = idx;
+        document.querySelectorAll('.sentence-item').forEach(function (el) {
+          el.classList.toggle('active', Number(el.dataset.idx) === idx);
+        });
+        renderDetail();
+      }
+
+      function renderDetail() {
+        if (!currentResult) return;
+        const sentence = currentResult.sentences[currentSentenceIdx];
+        if (!sentence) return;
+
+        detailTitle.textContent = 'Sentence ' + (currentSentenceIdx + 1) + ' of ' + currentResult.sentences.length;
+
+        tokensToggleBtn.textContent = 'Tokens (' + (sentence.tokens || []).length + ')';
+        wordsToggleBtn.textContent = 'Words (' + (sentence.words || []).length + ')';
+
+        const meta = sentence.metadata || [];
+        if (meta.length === 0) {
+          metadataBlock.innerHTML = '<div class="no-metadata">No metadata on this sentence</div>';
+        } else {
+          const rows = meta.map(function (m) {
+            return '<div class="metadata-row"><span class="key"># ' + escapeHtml(m.key) + '</span><span class="value">' + escapeHtml(m.value) + '</span></div>';
+          }).join('');
+          metadataBlock.innerHTML =
+            '<details' + (meta.length <= 4 ? ' open' : '') + '>' +
+            '<summary>Metadata (' + meta.length + ')</summary>' +
+            '<div class="metadata-content">' + rows + '</div>' +
+            '</details>';
+        }
+
+        renderTable(sentence);
+      }
+
+      function renderTable(sentence) {
+        const columns = currentResult.columns || [];
+        const thead = '<thead><tr>' + columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead>';
+
+        let rowsHtml = '';
+
+        if (currentView === 'tokens') {
+          const tokens = sentence.tokens || [];
+          tokens.forEach(function (token) {
+            const fields = padFields(token.fields, columns.length);
+            rowsHtml += '<tr class="row-token">' + fields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
+            (token.empty_nodes || []).forEach(function (en) {
+              const enFields = padFields(en.fields, columns.length);
+              rowsHtml += '<tr class="row-empty">' + enFields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
+            });
+          });
+        } else {
+          const words = sentence.words || [];
+          words.forEach(function (word) {
+            const fields = padFields(word, columns.length);
+            rowsHtml += '<tr class="row-word">' + fields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
+          });
+        }
+
+        tokenTable.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
+      }
+
+      viewToggleBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentView = btn.dataset.view;
+          viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
+          renderDetail();
+        });
+      });
+
+      sentenceFilter.addEventListener('input', function () {
+        renderSentenceList(sentenceFilter.value);
+        if (visibleIndices.length > 0 && visibleIndices.indexOf(currentSentenceIdx) === -1) {
+          selectSentence(visibleIndices[0]);
+        }
+      });
+
+      exportBtn.addEventListener('click', function () {
+        if (!currentResult) return;
+        const blob = new Blob([JSON.stringify(currentResult, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const base = currentFileName ? currentFileName.replace(/\.[^.]+$/, '') : 'conllu';
+        a.href = url;
+        a.download = base + '.parsed.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+
+      closeBtn.addEventListener('click', function() {
+        window.location.reload();
+      });
+
+    })();
+</script>
+</body>
+</html>

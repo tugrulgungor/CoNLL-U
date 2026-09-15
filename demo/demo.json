@@ -1,0 +1,22 @@
+[
+  {
+    "name": "[German] de_hdt-ud-test.conllu (23.7 MB)",
+    "file": "data/de_hdt-ud-test.conllu"
+  },
+  {
+    "name": "[English] en_gum-ud-test.conllu (2.81 MB)",
+    "file": "data/en_gum-ud-test.conllu"
+  },
+  {
+    "name": "[English] en_littleprince-ud-test.conllu (397 KB)",
+    "file": "data/en_littleprince-ud-test.conllu"
+  },
+  {
+    "name": "[Russian] ru_taiga-ud-test.conllu (1.28 MB)",
+    "file": "data/ru_taiga-ud-test.conllu"
+  },
+  {
+    "name": "[Turkish] tr_boun-ud-test.conllu (943 KB)",
+    "file": "data/tr_boun-ud-test.conllu"
+  }
+]
