@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ g++-14, clang++-18 ]
+        compiler: [ g++-14, clang++-19 ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,8 +20,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtest-dev ninja-build
 
+      - name: Installing Clang 19
+        if: matrix.compiler == 'clang++-19'
+        run: |
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh 19
+
       - name: Configuring CMake
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DBUILD_TESTS=ON
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_CXX_STANDARD=23 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF
+          -DCMAKE_CXX_FLAGS=-pedantic-errors
 
       - name: Build
         run: cmake --build build --parallel
