@@ -6,37 +6,48 @@
 #  Distributed under the MIT License.
 #  https://opensource.org/license/mit/
 
-#  CoNLL-U - https://github.com/tugrulgungor/CoNLL-U
-#
-#
-#  Distributed under the MIT License.
-#  https://opensource.org/license/mit/
-
 import os
 
-SOURCES: list[str] = [
+# Local `#include "conllu/..."` lines are stripped, so both lists must follow dependency order.
+# Class definitions: a class must come after every class it uses by value or as a template argument.
+HEADERS: list[str] = [
     "conllu/internal/string",
     "conllu/internal/string_hash",
     "conllu/internal/validate",
     "conllu/error",
-    "conllu/treebank",
-    "conllu/sentence",
     "conllu/token",
     "conllu/word",
+    "conllu/sentence",
+    "conllu/treebank",
+    "conllu/stream_parser",
+    "conllu/parser",
+    "conllu/writer"
+]
+
+# Inline definitions: functions with a deduced (`auto`) return type must be defined before their first use
+# (e.g. token.ipp calls Sentence::words()). Mirrors the include order at the bottom of treebank.hpp.
+IMPLS: list[str] = [
+    "conllu/internal/string",
+    "conllu/internal/string_hash",
+    "conllu/internal/validate",
+    "conllu/error",
+    "conllu/sentence",
+    "conllu/token",
+    "conllu/treebank",
+    "conllu/word",
+    "conllu/stream_parser",
     "conllu/parser",
     "conllu/writer"
 ]
 
 
 def expand_sources() -> list[str]:
-    global SOURCES
-
     sources: list[str] = []
 
-    for source in SOURCES:
+    for source in HEADERS:
         sources.append(f'../include/{source}.hpp')
 
-    for source in SOURCES:
+    for source in IMPLS:
         parts = source.split('/')
         parts.insert(len(parts) - 1, 'impl')
         sources.append(f'../include/{'/'.join(parts)}.ipp')
@@ -76,9 +87,22 @@ def generate_single_header() -> None:
             has_include_block: list[str] = []
             has_include_block_started: bool = False
 
+            in_block_comment: bool = False
+
             for line in ifile:
                 line_idx += 1
                 if 10 > line_idx:
+                    continue
+
+                # Drop /* ... */ comment blocks. Tracked as state: a code line may itself start with '*'
+                # (e.g. a wrapped dereference), so a leading '*' alone does not mark a comment line.
+                if in_block_comment:
+                    if '*/' in line:
+                        in_block_comment = False
+                    continue
+
+                if line.lstrip().startswith('/*'):
+                    in_block_comment = '*/' not in line
                     continue
 
                 if line.startswith('#if __has_include') and '.ipp' not in source:
@@ -107,11 +131,6 @@ def generate_single_header() -> None:
                     if line not in include_lines:
                         include_lines.append(line)
                 else:
-                    if '/*' in line or '*' in line or '*/' in line:
-                        sline = line.strip()
-                        if sline.startswith('/*') or sline.startswith('*') or sline.startswith('*/'):
-                            continue
-
                     code_lines.append(line)
 
     include_lines.sort()
