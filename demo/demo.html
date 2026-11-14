@@ -14,20 +14,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CoNLL-U Viewer</title>
+    <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
           rel="stylesheet">
-
-    <script>
-        window.__conlluReady = false;
-        window.Module = window.Module || {};
-        window.Module.onRuntimeInitialized = function () {
-          window.__conlluReady = true;
-          if (window.__onParserReady) window.__onParserReady();
-        };
-    </script>
-    <script src="conllu.js" onerror="window.__conlluScriptMissing = true;"></script>
 
     <style>
         :root{
@@ -63,7 +54,7 @@
 
         h1, h2, h3{ font-family: var(--serif); font-weight: 600; margin: 0; }
 
-        button, input{ font-family: inherit; font-size: inherit; color: inherit; }
+        button, input, textarea{ font-family: inherit; font-size: inherit; color: inherit; }
 
         :focus-visible{
           outline: 2px solid var(--accent);
@@ -96,8 +87,8 @@
         .brand h1{ font-size: 20px; letter-spacing: 0.01em; white-space: nowrap; }
         .brand .brand-sub{ color: var(--text-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        .topbar-actions{ display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
-        .status{ color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+        .topbar-actions{ display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .status{ color: var(--text-dim); font-size: 12px; white-space: nowrap; margin-right: 4px; }
         .status.is-error{ color: var(--error); }
 
         .file-btn{
@@ -154,7 +145,7 @@
         }
 
         .state-card{
-          max-width: 480px;
+          max-width: 520px;
           width: 100%;
           text-align: left;
         }
@@ -177,6 +168,16 @@
           color: var(--text);
         }
 
+        .link-btn{
+          background: none;
+          border: none;
+          padding: 0;
+          color: var(--accent);
+          cursor: pointer;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+
         .samples-block{ margin-top: 20px; }
         .samples-label{ font-size: 12px; color: var(--text-faint); margin: 0 0 8px; }
         .samples-list{ display: flex; flex-wrap: wrap; gap: 8px; }
@@ -191,7 +192,7 @@
           transition: border-color 120ms ease, color 120ms ease;
         }
         .sample-btn:hover{ border-color: var(--accent); color: var(--accent); }
-        .sample-btn.is-loading{ color: var(--accent-2); border-color: var(--accent-2); cursor: wait; }
+        .sample-btn:disabled{ cursor: not-allowed; opacity: 0.5; }
 
         .setup-panel code, .error-panel code{
           display: block;
@@ -206,8 +207,33 @@
           word-break: break-word;
         }
 
-        .error-panel .state-card h2{ color: var(--error); }
+        .error-panel h2{ color: var(--error); }
         .error-panel code{ color: var(--error); border-color: var(--error-soft); background: var(--error-soft); }
+        .error-panel .ghost-btn{ margin-top: 18px; }
+
+        .progress-track{
+          margin-top: 18px;
+          height: 6px;
+          border-radius: 3px;
+          background: var(--bg-inset);
+          border: 1px solid var(--line);
+          overflow: hidden;
+        }
+        .progress-fill{
+          height: 100%;
+          width: 0;
+          background: var(--accent);
+          transition: width 120ms linear;
+        }
+        .progress-track.is-indeterminate .progress-fill{
+          width: 30%;
+          animation: indeterminate 1.1s ease-in-out infinite;
+        }
+        @keyframes indeterminate{
+          from{ transform: translateX(-100%); }
+          to{ transform: translateX(340%); }
+        }
+        .progress-text{ margin-top: 10px; font-size: 12.5px; color: var(--text-dim); }
 
         .results{
           flex: 1;
@@ -229,7 +255,6 @@
           flex-shrink: 0;
         }
         .stats-bar .stat strong{ color: var(--text); font-weight: 600; }
-        .stats-bar .columns-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
         .chip{
           padding: 2px 8px;
           border: 1px solid var(--line);
@@ -237,6 +262,7 @@
           color: var(--text-dim);
           font-size: 11.5px;
         }
+        .chip.is-edited{ color: var(--accent-2); border-color: var(--accent-2); }
         .spacer{ flex: 1; }
         .ghost-btn{
           background: transparent;
@@ -245,9 +271,12 @@
           padding: 6px 12px;
           border-radius: 3px;
           cursor: pointer;
+          white-space: nowrap;
           transition: border-color 120ms ease, color 120ms ease;
         }
         .ghost-btn:hover{ border-color: var(--accent); color: var(--accent); }
+        .ghost-btn.is-primary{ border-color: var(--accent); color: var(--accent); }
+        .ghost-btn:disabled{ opacity: 0.5; cursor: wait; }
 
         .workspace{
           flex: 1;
@@ -297,6 +326,7 @@
         }
         .sentence-item .idx{ color: var(--text-faint); margin-right: 8px; }
         .sentence-item.active .idx{ color: var(--accent); }
+        .sentence-item .sid{ color: var(--text-faint); font-size: 11.5px; }
         .sentence-item .preview{
           display: block;
           margin-top: 3px;
@@ -326,29 +356,15 @@
           flex-wrap: wrap;
         }
         .detail-header h2{ font-size: 19px; }
+        .detail-header .sent-id{ color: var(--text-faint); font-size: 12.5px; margin-left: 10px; font-family: var(--mono); font-weight: 400; }
+        .detail-actions{ display: flex; gap: 8px; }
 
-        .view-toggle{
-          display: inline-flex;
-          border: 1px solid var(--line);
-          border-radius: 3px;
-          overflow: hidden;
-        }
-        .toggle-btn{
-          background: transparent;
-          border: none;
-          color: var(--text-dim);
-          padding: 6px 14px;
-          cursor: pointer;
-        }
-        .toggle-btn + .toggle-btn{ border-left: 1px solid var(--line); }
-        .toggle-btn.active{ background: var(--accent-soft); color: var(--accent); }
-
-        .metadata-block{
+        .metadata-block, .tree-block{
           padding: 0 20px 10px;
           flex-shrink: 0;
         }
-        .metadata-block details{ border: 1px solid var(--line-soft); border-radius: 4px; }
-        .metadata-block summary{
+        .metadata-block details, .tree-block details{ border: 1px solid var(--line-soft); border-radius: 4px; }
+        .metadata-block summary, .tree-block summary{
           cursor: pointer;
           padding: 7px 12px;
           font-size: 12.5px;
@@ -359,16 +375,16 @@
           gap: 6px;
           user-select: none;
         }
-        .metadata-block summary::-webkit-details-marker{ display: none; }
-        .metadata-block summary::before{
+        .metadata-block summary::-webkit-details-marker, .tree-block summary::-webkit-details-marker{ display: none; }
+        .metadata-block summary::before, .tree-block summary::before{
           content: "▸";
           display: inline-block;
           font-size: 10px;
           color: var(--text-faint);
           transition: transform 120ms ease;
         }
-        .metadata-block details[open] summary::before{ transform: rotate(90deg); }
-        .metadata-block summary:hover{ color: var(--text); }
+        .metadata-block details[open] summary::before, .tree-block details[open] summary::before{ transform: rotate(90deg); }
+        .metadata-block summary:hover, .tree-block summary:hover{ color: var(--text); }
         .metadata-content{
           max-height: 30vh;
           overflow-y: auto;
@@ -385,11 +401,36 @@
         .metadata-row .value{ color: var(--text); word-break: break-word; }
         .no-metadata{ color: var(--text-faint); font-size: 12.5px; padding: 6px 0; }
 
+        .tree-scroll{
+          overflow: auto;
+          max-height: 42vh;
+          border-top: 1px solid var(--line-soft);
+        }
+        .tree-scroll svg{ display: block; }
+        .tree-arc{ fill: none; stroke: var(--text-faint); stroke-width: 1.3; }
+        .tree-arrow{ fill: var(--text-faint); }
+        .tree-label{
+          fill: var(--text-dim);
+          font-size: 11px;
+          text-anchor: middle;
+          paint-order: stroke;
+          stroke: var(--bg);
+          stroke-width: 5px;
+          stroke-linejoin: round;
+        }
+        .tree-form{ fill: var(--text); font-size: 13px; text-anchor: middle; }
+        .tree-upos{ fill: var(--text-faint); font-size: 10.5px; text-anchor: middle; letter-spacing: 0.03em; }
+        .tree-node{ cursor: default; }
+        .is-hl .tree-arc, .tree-arc.is-hl{ stroke: var(--accent); stroke-width: 1.8; }
+        .tree-arrow.is-hl{ fill: var(--accent); }
+        .tree-label.is-hl{ fill: var(--accent); }
+        .tree-node.is-hl .tree-form{ fill: var(--accent); }
+        .tree-empty{ padding: 10px 12px; color: var(--text-faint); font-size: 12.5px; }
+
         .table-wrap{
           flex: 1;
           min-height: 0;
           overflow: auto;
-          border-top: 1px solid var(--line-soft);
           margin: 0 20px 18px;
           border: 1px solid var(--line-soft);
           border-radius: 4px;
@@ -420,19 +461,109 @@
           white-space: nowrap;
           color: var(--text);
         }
-
-        tbody tr.row-token:hover{ background: var(--bg-raised); }
-
-        tbody tr.row-empty{
-          background: var(--accent-2-soft);
+        tbody td.is-unset{ color: var(--text-faint); }
+        tbody td.is-editable{ cursor: text; }
+        tbody td.is-editing{ padding: 2px 4px; }
+        tbody td input{
+          width: 100%;
+          min-width: 70px;
+          background: var(--bg-inset);
+          border: 1px solid var(--accent);
+          border-radius: 2px;
+          padding: 3px 7px;
+          color: var(--text);
         }
+
+        tbody tr.row-token:hover, tbody tr.row-token.is-hl{ background: var(--bg-raised); }
+        tbody tr.row-token.is-hl td:first-child{ box-shadow: inset 2px 0 0 var(--accent); }
+
+        tbody tr.row-word{ background: var(--accent-soft); }
+        tbody tr.row-word td{ color: var(--accent); }
+        tbody tr.row-word td.is-unset{ color: var(--text-faint); }
+
+        tbody tr.row-empty{ background: var(--accent-2-soft); }
         tbody tr.row-empty td{ color: var(--accent-2); font-style: italic; }
+        tbody tr.row-empty td.is-unset{ color: var(--text-faint); }
         tbody tr.row-empty td:first-child{
           border-left: 2px solid var(--accent-2);
           padding-left: 20px;
         }
 
-        tbody tr.row-word:hover{ background: var(--bg-raised); }
+        td.row-actions{ width: 1%; text-align: right; padding: 0 8px; }
+        .row-remove{
+          visibility: hidden;
+          background: none;
+          border: 1px solid transparent;
+          color: var(--text-faint);
+          border-radius: 3px;
+          width: 24px;
+          height: 24px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        tr:hover .row-remove{ visibility: visible; }
+        .row-remove:hover{ color: var(--error); border-color: var(--error-soft); }
+
+        .legend{
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 16px;
+          padding: 0 20px 8px;
+          font-size: 11.5px;
+          color: var(--text-faint);
+          flex-shrink: 0;
+        }
+        .legend .swatch{ display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+        .legend .swatch.word{ background: var(--accent); }
+        .legend .swatch.empty{ background: var(--accent-2); }
+
+        dialog{
+          background: var(--bg-raised);
+          color: var(--text);
+          border: 1px solid var(--line);
+          border-radius: 6px;
+          padding: 20px;
+          width: min(760px, 92vw);
+        }
+        dialog::backdrop{ background: rgba(8, 10, 13, 0.7); }
+        dialog h2{ font-size: 20px; margin-bottom: 6px; }
+        dialog p{ color: var(--text-dim); margin: 0 0 12px; font-size: 12.5px; }
+        dialog textarea{
+          width: 100%;
+          height: 46vh;
+          resize: vertical;
+          background: var(--bg-inset);
+          border: 1px solid var(--line);
+          border-radius: 3px;
+          padding: 10px 12px;
+          color: var(--text);
+          font-size: 12.5px;
+          tab-size: 8;
+          white-space: pre;
+        }
+        .dialog-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+        .toast-stack{
+          position: fixed;
+          right: 20px;
+          bottom: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          z-index: 10;
+          max-width: min(440px, calc(100vw - 40px));
+        }
+        .toast{
+          background: var(--bg-raised);
+          border: 1px solid var(--line);
+          border-left: 3px solid var(--accent);
+          border-radius: 4px;
+          padding: 10px 14px;
+          font-size: 12.5px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
+        .toast.is-error{ border-left-color: var(--error); }
+        .toast .link-btn{ margin-left: 8px; }
 
         @media (max-width: 760px){
           .topbar{ padding: 12px 14px; }
@@ -446,11 +577,12 @@
             width: 100%;
             border-right: none;
             border-bottom: 1px solid var(--line);
-            max-height: 40vh;
+            max-height: 30vh;
           }
 
           .detail-header{ padding: 14px 14px 8px; }
-          .metadata-block{ padding: 0 14px 10px; }
+          .metadata-block, .tree-block{ padding: 0 14px 10px; }
+          .legend{ padding: 0 14px 8px; }
           .metadata-content{ max-height: 20vh; }
           .table-wrap{ margin: 0 14px 14px; }
 
@@ -471,10 +603,11 @@
     <header class="topbar">
         <div class="brand">
             <h1>CoNLL-U Viewer</h1>
-            <span class="brand-sub">reads CoNLL-U and CoNLL-U Plus files</span>
+            <span class="brand-sub">the C++ library, running in your browser via WebAssembly</span>
         </div>
         <div class="topbar-actions">
             <span id="statusText" class="status">Loading parser…</span>
+            <button class="ghost-btn" id="pasteBtn" type="button" disabled>Paste</button>
             <label class="file-btn is-disabled" id="fileBtn">
                 <input type="file" id="fileInput" accept=".conllu,.conllup,.conll,.txt" hidden disabled>
                 <span>Open file</span>
@@ -505,19 +638,30 @@
         <section id="emptyState" class="center-state">
             <div class="state-card">
                 <h2>No file loaded</h2>
-                <p>Open a CoNLL-U or CoNLL-U Plus file to inspect its sentences, tokens, and annotations.</p>
-                <div class="drop-zone" id="dropZone">Drop a file here, or use "Open file" above</div>
+                <p>Open a CoNLL-U or CoNLL-U Plus file to explore its sentences and dependency trees, edit
+                    annotations, and download the result.</p>
+                <div class="drop-zone" id="dropZone">Drop a file here, or <button class="link-btn" id="pasteLink" type="button">paste text</button></div>
                 <div class="samples-block" id="samplesBlock" hidden>
-                    <p class="samples-label">Or try a sample:</p>
+                    <p class="samples-label">Or stream a sample treebank:</p>
                     <div class="samples-list" id="samplesList"></div>
                 </div>
+            </div>
+        </section>
+
+        <section id="progressPanel" class="center-state" hidden>
+            <div class="state-card">
+                <h2 id="progressTitle">Parsing…</h2>
+                <p id="progressFile"></p>
+                <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-text" id="progressText"></div>
             </div>
         </section>
 
         <section id="setupPanel" class="center-state" hidden>
             <div class="state-card setup-panel">
                 <h2>Parser not connected</h2>
-                <p id="setupMessage">This page couldn't find your compiled parser.</p>
+                <p id="setupMessage">This page couldn't start the WebAssembly parser.</p>
+                <code id="setupDetail" hidden></code>
             </div>
         </section>
 
@@ -526,6 +670,7 @@
                 <h2>Couldn't parse this file</h2>
                 <p id="errorFileName"></p>
                 <code id="errorMessage"></code>
+                <button class="ghost-btn" id="errorBackBtn" type="button">Back</button>
             </div>
         </section>
 
@@ -533,30 +678,44 @@
             <div class="stats-bar">
                 <span class="stat"><strong id="statSentences">0</strong> sentences</span>
                 <span class="stat"><strong id="statTokens">0</strong> tokens</span>
+                <span class="stat"><strong id="statWords">0</strong> multiword tokens</span>
+                <span class="stat"><strong id="statEmpty">0</strong> empty nodes</span>
+                <span class="stat" id="statColumnsWrap"><strong id="statColumns">0</strong> columns</span>
                 <span class="stat"><strong id="statParseTime">0 ms</strong> parse time</span>
-                <div class="columns-chips" id="columnsChips"></div>
+                <span class="chip is-edited" id="editedChip" hidden>edited</span>
                 <div class="spacer"></div>
-                <button class="ghost-btn" id="exportBtn">Export JSON</button>
-                <button class="ghost-btn" id="closeBtn">Close</button>
+                <button class="ghost-btn" id="validateBtn" type="button">Validate</button>
+                <button class="ghost-btn" id="downloadBtn" type="button">Download .conllu</button>
+                <button class="ghost-btn" id="closeBtn" type="button">Close</button>
             </div>
 
             <div class="workspace">
                 <aside class="sentence-list">
                     <div class="sentence-filter-wrap">
-                        <input type="search" id="sentenceFilter" placeholder="Filter sentences…">
+                        <input type="search" id="sentenceFilter" placeholder="Filter by text or sent_id…">
                     </div>
                     <div id="sentenceItems"></div>
                 </aside>
 
                 <div class="detail-panel">
                     <div class="detail-header">
-                        <h2 id="detailTitle">Sentence</h2>
-                        <div class="view-toggle">
-                            <button class="toggle-btn active" data-view="tokens">Tokens</button>
-                            <button class="toggle-btn" data-view="words">Words</button>
+                        <h2><span id="detailTitle">Sentence</span><span class="sent-id" id="detailSentId"></span></h2>
+                        <div class="detail-actions">
+                            <button class="ghost-btn" id="addTokenBtn" type="button" title="Append a token to this sentence">+ Token</button>
                         </div>
                     </div>
                     <div class="metadata-block" id="metadataBlock"></div>
+                    <div class="tree-block" id="treeBlock">
+                        <details open>
+                            <summary>Dependency tree</summary>
+                            <div class="tree-scroll" id="treeScroll"></div>
+                        </details>
+                    </div>
+                    <div class="legend">
+                        <span><span class="swatch word"></span>multiword token</span>
+                        <span><span class="swatch empty"></span>empty node</span>
+                        <span>double-click a cell to edit · <kbd>_</kbd> or empty unsets it · ↑ ↓ change sentence</span>
+                    </div>
                     <div class="table-wrap">
                         <table id="tokenTable"></table>
                     </div>
@@ -567,111 +726,191 @@
     </main>
 </div>
 
+<dialog id="pasteDialog">
+    <form method="dialog">
+        <h2>Paste CoNLL-U</h2>
+        <p>Tab-separated, one token per line, sentences separated by a blank line. Every sentence needs a
+            <code># sent_id</code>.</p>
+        <textarea id="pasteText" spellcheck="false"></textarea>
+        <div class="dialog-actions">
+            <button class="ghost-btn" id="pasteExampleBtn" type="button">Insert example</button>
+            <div class="spacer"></div>
+            <button class="ghost-btn" value="cancel">Cancel</button>
+            <button class="ghost-btn is-primary" id="pasteParseBtn" value="parse">Parse</button>
+        </div>
+    </form>
+</dialog>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
 <script>
     (function () {
       'use strict';
 
-      const CONFIG = {
-        factoryName: 'createConlluDemoModule',
-        parseFunctionName: 'parse_conllu_file'
-      };
+      const EXAMPLE = [
+        '# sent_id = example-1',
+        "# text = Don't go there.",
+        "1-2\tDon't\t_\t_\t_\t_\t_\t_\t_\t_",
+        '1\tDo\tdo\tAUX\tVBP\tMood=Imp|VerbForm=Fin\t3\taux\t_\t_',
+        "2\tn't\tnot\tPART\tRB\tPolarity=Neg\t3\tadvmod\t_\t_",
+        '3\tgo\tgo\tVERB\tVB\tVerbForm=Inf\t0\troot\t_\t_',
+        '4\tthere\tthere\tADV\tRB\tPronType=Dem\t3\tadvmod\t_\tSpaceAfter=No',
+        '5\t.\t.\tPUNCT\t.\t_\t3\tpunct\t_\t_',
+        ''
+      ].join('\n');
 
-      const statusText = document.getElementById('statusText');
-      const fileBtn = document.getElementById('fileBtn');
-      const fileInput = document.getElementById('fileInput');
-      const dropZone = document.getElementById('dropZone');
+      const $ = function (id) { return document.getElementById(id); };
 
-      const emptyState = document.getElementById('emptyState');
-      const samplesBlock = document.getElementById('samplesBlock');
-      const samplesList = document.getElementById('samplesList');
-      const setupPanel = document.getElementById('setupPanel');
-      const setupMessage = document.getElementById('setupMessage');
-      const errorPanel = document.getElementById('errorPanel');
-      const errorFileName = document.getElementById('errorFileName');
-      const errorMessage = document.getElementById('errorMessage');
-      const resultsView = document.getElementById('resultsView');
+      const statusText = $('statusText');
+      const pasteBtn = $('pasteBtn');
+      const fileBtn = $('fileBtn');
+      const fileInput = $('fileInput');
+      const dropZone = $('dropZone');
+      const pasteLink = $('pasteLink');
 
-      const statSentences = document.getElementById('statSentences');
-      const statTokens = document.getElementById('statTokens');
-      const statParseTime = document.getElementById('statParseTime');
-      const columnsChips = document.getElementById('columnsChips');
-      const exportBtn = document.getElementById('exportBtn');
-      const closeBtn = document.getElementById('closeBtn');
+      const emptyState = $('emptyState');
+      const samplesBlock = $('samplesBlock');
+      const samplesList = $('samplesList');
+      const progressPanel = $('progressPanel');
+      const progressTitle = $('progressTitle');
+      const progressFile = $('progressFile');
+      const progressTrack = $('progressTrack');
+      const progressFill = $('progressFill');
+      const progressText = $('progressText');
+      const setupPanel = $('setupPanel');
+      const setupMessage = $('setupMessage');
+      const setupDetail = $('setupDetail');
+      const errorPanel = $('errorPanel');
+      const errorFileName = $('errorFileName');
+      const errorMessage = $('errorMessage');
+      const resultsView = $('resultsView');
 
-      const sentenceFilter = document.getElementById('sentenceFilter');
-      const sentenceItems = document.getElementById('sentenceItems');
-      const detailTitle = document.getElementById('detailTitle');
-      const metadataBlock = document.getElementById('metadataBlock');
-      const tokenTable = document.getElementById('tokenTable');
-      const viewToggleBtns = document.querySelectorAll('.toggle-btn');
-      const tokensToggleBtn = document.querySelector('.toggle-btn[data-view="tokens"]');
-      const wordsToggleBtn = document.querySelector('.toggle-btn[data-view="words"]');
+      const statSentences = $('statSentences');
+      const statTokens = $('statTokens');
+      const statWords = $('statWords');
+      const statEmpty = $('statEmpty');
+      const statParseTime = $('statParseTime');
+      const statColumns = $('statColumns');
+      const statColumnsWrap = $('statColumnsWrap');
+      const editedChip = $('editedChip');
 
-      let ParserModule = null;
-      let currentResult = null;
-      let currentFileName = '';
-      let currentSentenceIdx = 0;
-      let currentView = 'tokens';
+      const sentenceFilter = $('sentenceFilter');
+      const sentenceItems = $('sentenceItems');
+      const detailTitle = $('detailTitle');
+      const detailSentId = $('detailSentId');
+      const metadataBlock = $('metadataBlock');
+      const treeBlock = $('treeBlock');
+      const treeScroll = $('treeScroll');
+      const tokenTable = $('tokenTable');
+
+      const pasteDialog = $('pasteDialog');
+      const pasteText = $('pasteText');
+      const toastStack = $('toastStack');
+
+      let ready = false;
+      let summary = null;          // { columns, sentences: [{id, text}], stats, parse_ms }
+      let sentence = null;         // the selected sentence: { index, sent_id, metadata, rows }
+      let fileName = '';
       let visibleIndices = [];
+      let busy = false;
 
-      function show(el){ el.hidden = false; }
-      function hide(el){ el.hidden = true; }
-      function hideAllStates(){
-        hide(emptyState); hide(setupPanel); hide(errorPanel); hide(resultsView);
+      // Worker
+
+      let worker = null;
+      let nextRequestId = 1;
+      const pending = new Map();
+
+      function request(message) {
+        return new Promise(function (resolve) {
+          const id = nextRequestId++;
+          pending.set(id, resolve);
+          worker.postMessage(Object.assign({ id: id }, message));
+        });
       }
-      function setStatus(text, isError){
+
+      function startWorker() {
+        try {
+          worker = new Worker('worker.js');
+        } catch (err) {
+          showSetup('Web Workers are unavailable here. Serve this page over HTTP rather than opening it as a file.', err);
+          return;
+        }
+
+        const timeout = setTimeout(function () {
+          if (!ready) showSetup('The parser did not start within 20 seconds.');
+        }, 20000);
+
+        worker.onmessage = function (event) {
+          const message = event.data;
+          if (message.type === 'ready') {
+            clearTimeout(timeout);
+            onReady();
+          } else if (message.type === 'fatal') {
+            clearTimeout(timeout);
+            showSetup('The WebAssembly module failed to start.', message.error);
+          } else if (message.type === 'progress') {
+            onProgress(message);
+          } else if (pending.has(message.id)) {
+            pending.get(message.id)(message.result);
+            pending.delete(message.id);
+          }
+        };
+
+        worker.onerror = function (event) {
+          clearTimeout(timeout);
+          showSetup('The parser worker could not be loaded (worker.js, conllu.js, or conllu.wasm is missing).', event.message);
+        };
+      }
+
+      function onReady() {
+        ready = true;
+        setStatus('Ready');
+        fileBtn.classList.remove('is-disabled');
+        fileInput.disabled = false;
+        pasteBtn.disabled = false;
+        samplesList.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      }
+
+      // States
+
+      function show(el) { el.hidden = false; }
+      function hide(el) { el.hidden = true; }
+      function showOnly(el) {
+        [emptyState, progressPanel, setupPanel, errorPanel, resultsView].forEach(hide);
+        show(el);
+      }
+
+      function setStatus(text, isError) {
         statusText.textContent = text;
         statusText.classList.toggle('is-error', !!isError);
       }
 
-      function bootParser() {
-        if (window.__conlluScriptMissing) {
-          return showSetup('The glue script "conllu.js" could not be loaded.');
-        }
-        try {
-          if (typeof window[CONFIG.factoryName] === 'function') {
-            window[CONFIG.factoryName]().then(function (mod) {
-              ParserModule = mod;
-              onParserReady();
-            }).catch(function (err) {
-              showSetup('The parser factory function threw an error while starting.', err);
-            });
-            return;
-          }
-          if (window.__conlluReady && typeof Module !== 'undefined') {
-            ParserModule = Module;
-            onParserReady();
-            return;
-          }
-          window.__onParserReady = function () {
-            ParserModule = Module;
-            onParserReady();
-          };
-          setTimeout(function () {
-            if (!ParserModule) {
-              showSetup('The parser did not finish initializing within 15 seconds.');
-            }
-          }, 15000);
-        } catch (err) {
-          showSetup('Unexpected error while starting the parser.', err);
-        }
-      }
-
-      function onParserReady() {
-        setStatus('Ready — choose a CoNLL-U file');
-        fileBtn.classList.remove('is-disabled');
-        fileInput.disabled = false;
-      }
-
-      function showSetup(message, err) {
+      function showSetup(message, detail) {
         setStatus('Parser not connected', true);
-        hideAllStates();
         setupMessage.textContent = message;
-        show(setupPanel);
+        setupDetail.textContent = detail ? String(detail) : '';
+        setupDetail.hidden = !detail;
+        showOnly(setupPanel);
       }
 
-      window.addEventListener('load', bootParser);
-      window.addEventListener('load', loadSamples);
+      function toast(message, options) {
+        options = options || {};
+        const el = document.createElement('div');
+        el.className = 'toast' + (options.error ? ' is-error' : '');
+        el.textContent = message;
+        if (options.action) {
+          const btn = document.createElement('button');
+          btn.className = 'link-btn';
+          btn.type = 'button';
+          btn.textContent = options.action.label;
+          btn.addEventListener('click', function () { el.remove(); options.action.run(); });
+          el.appendChild(btn);
+        }
+        toastStack.appendChild(el);
+        setTimeout(function () { el.remove(); }, options.error ? 7000 : 3500);
+      }
+
+      // Samples
 
       async function loadSamples() {
         try {
@@ -679,96 +918,535 @@
           if (!res.ok) return;
           const samples = await res.json();
           if (!Array.isArray(samples) || samples.length === 0) return;
-          renderSamples(samples);
+
+          samplesList.innerHTML = '';
+          samples.forEach(function (sample) {
+            if (!sample || !sample.name || !sample.file) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sample-btn';
+            btn.textContent = sample.name;
+            btn.disabled = !ready;
+            btn.addEventListener('click', function () {
+              parseSource({ name: sample.name, url: sample.file });
+            });
+            samplesList.appendChild(btn);
+          });
+          show(samplesBlock);
         } catch (err) {
         }
       }
 
-      function renderSamples(samples) {
-        samplesList.innerHTML = '';
-        samples.forEach(function (sample) {
-          if (!sample || !sample.name || !sample.file) return;
+      // Parsing
+
+      function formatBytes(n) {
+        if (n < 1024) return n + ' B';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+        return (n / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      function formatDuration(ms) {
+        if (ms < 1000) return Math.round(ms) + ' ms';
+        return (ms / 1000).toFixed(2) + ' s';
+      }
+
+      function onProgress(message) {
+        const known = message.total > 0;
+        progressTrack.classList.toggle('is-indeterminate', !known);
+        progressFill.style.width = known ? Math.min(100, (100 * message.loaded) / message.total) + '%' : '';
+        progressText.textContent = message.sentences.toLocaleString() + ' sentences · ' + formatBytes(message.loaded) +
+          (known ? ' of ' + formatBytes(message.total) : '');
+      }
+
+      async function parseSource(source) {
+        if (!ready || busy) return;
+        busy = true;
+
+        fileName = source.name;
+        progressTitle.textContent = 'Parsing…';
+        progressFile.textContent = source.name;
+        progressFill.style.width = '0';
+        progressTrack.classList.remove('is-indeterminate');
+        progressText.textContent = '';
+        showOnly(progressPanel);
+        setStatus('Parsing ' + source.name + '…');
+
+        const result = await request({ type: 'parse', url: source.url, blob: source.blob, text: source.text });
+        busy = false;
+
+        if (!result.ok) {
+          setStatus('Ready');
+          errorFileName.textContent = source.name;
+          errorMessage.textContent = result.error + (result.line ? '\n(sentence starting at line ' + result.line + ')' : '');
+          showOnly(errorPanel);
+          return;
+        }
+
+        summary = result;
+        setStatus('Ready');
+        renderResults();
+      }
+
+      // Results
+
+      function renderStats(stats) {
+        statSentences.textContent = stats.sentences.toLocaleString();
+        statTokens.textContent = stats.tokens.toLocaleString();
+        statWords.textContent = stats.words.toLocaleString();
+        statEmpty.textContent = stats.empty_nodes.toLocaleString();
+      }
+
+      function renderResults() {
+        renderStats(summary.stats);
+        statParseTime.textContent = formatDuration(summary.parse_ms || 0);
+        editedChip.hidden = true;
+
+        statColumns.textContent = summary.columns.length;
+        statColumnsWrap.title = summary.columns.join(' ');
+
+        sentenceFilter.value = '';
+        renderSentenceList();
+        showOnly(resultsView);
+
+        if (summary.sentences.length > 0) {
+          selectSentence(0);
+        } else {
+          sentence = null;
+          detailTitle.textContent = 'No sentences found';
+          detailSentId.textContent = '';
+          metadataBlock.innerHTML = '';
+          treeScroll.innerHTML = '';
+          tokenTable.innerHTML = '';
+        }
+      }
+
+      function renderSentenceList() {
+        const needle = sentenceFilter.value.trim().toLowerCase();
+        const fragment = document.createDocumentFragment();
+        visibleIndices = [];
+
+        summary.sentences.forEach(function (s, idx) {
+          if (needle && (s.text + ' ' + s.id).toLowerCase().indexOf(needle) === -1) return;
+          visibleIndices.push(idx);
+
           const btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'sample-btn';
-          btn.textContent = sample.name;
-          btn.addEventListener('click', function () { loadSampleFile(sample, btn); });
-          samplesList.appendChild(btn);
+          btn.className = 'sentence-item' + (sentence && idx === sentence.index ? ' active' : '');
+          btn.dataset.idx = idx;
+
+          const head = document.createElement('span');
+          head.innerHTML = '<span class="idx">' + (idx + 1) + '</span><span class="sid"></span>';
+          head.querySelector('.sid').textContent = s.id;
+          const preview = document.createElement('span');
+          preview.className = 'preview';
+          preview.textContent = s.text || '(no text)';
+
+          btn.appendChild(head);
+          btn.appendChild(preview);
+          fragment.appendChild(btn);
         });
-        show(samplesBlock);
-      }
 
-      async function loadSampleFile(sample, btn) {
-        if (!ParserModule) { setStatus('Parser is still loading…'); return; }
-        const originalLabel = btn.textContent;
-        btn.classList.add('is-loading');
-        btn.textContent = 'Loading…';
-        try {
-          const res = await fetch(sample.file);
-          if (!res.ok) throw new Error('Could not fetch "' + sample.file + '" (HTTP ' + res.status + ')');
-          const text = await res.text();
-          const pseudoFile = { name: sample.name, text: function () { return Promise.resolve(text); } };
-          await processFile(pseudoFile);
-        } catch (err) {
-          showError(sample.name, err && err.message ? err.message : String(err));
-        } finally {
-          btn.classList.remove('is-loading');
-          btn.textContent = originalLabel;
+        sentenceItems.innerHTML = '';
+        if (visibleIndices.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'no-matches';
+          empty.textContent = 'No sentences match "' + sentenceFilter.value + '"';
+          sentenceItems.appendChild(empty);
+        } else {
+          sentenceItems.appendChild(fragment);
         }
       }
 
-      function callParser(text) {
-        const fn = CONFIG.parseFunctionName;
-        if (!ParserModule) throw new Error('Parser module is not ready yet.');
-        if (typeof ParserModule[fn] === 'function') {
-          return ParserModule[fn](text);
+      async function selectSentence(idx) {
+        const result = await request({ type: 'sentence', index: idx });
+        if (!result.ok) { toast(result.error, { error: true }); return; }
+        sentence = result;
+
+        sentenceItems.querySelectorAll('.sentence-item').forEach(function (el) {
+          const active = Number(el.dataset.idx) === idx;
+          el.classList.toggle('active', active);
+          if (active) el.scrollIntoView({ block: 'nearest' });
+        });
+
+        renderDetail();
+      }
+
+      function renderDetail() {
+        detailTitle.textContent = 'Sentence ' + (sentence.index + 1) + ' of ' + summary.sentences.length.toLocaleString();
+        detailSentId.textContent = sentence.sent_id;
+
+        const meta = sentence.metadata;
+        if (meta.length === 0) {
+          metadataBlock.innerHTML = '<div class="no-metadata">No metadata on this sentence</div>';
+        } else {
+          const details = document.createElement('details');
+          details.open = meta.length <= 4;
+          details.innerHTML = '<summary>Metadata (' + meta.length + ')</summary><div class="metadata-content"></div>';
+          const content = details.querySelector('.metadata-content');
+          meta.forEach(function (m) {
+            const row = document.createElement('div');
+            row.className = 'metadata-row';
+            row.innerHTML = '<span class="key"></span><span class="value"></span>';
+            row.querySelector('.key').textContent = '# ' + m.key;
+            row.querySelector('.value').textContent = m.value;
+            content.appendChild(row);
+          });
+          metadataBlock.innerHTML = '';
+          metadataBlock.appendChild(details);
         }
-        if (typeof ParserModule.cwrap === 'function') {
-          if (!ParserModule.__cwrapped) ParserModule.__cwrapped = {};
-          if (!ParserModule.__cwrapped[fn]) {
-            ParserModule.__cwrapped[fn] = ParserModule.cwrap(fn, 'string', ['string']);
+
+        renderTree();
+        renderTable();
+      }
+
+      // Dependency tree
+
+      const measureContext = document.createElement('canvas').getContext('2d');
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+
+      function svg(tag, attrs, text) {
+        const el = document.createElementNS(SVG_NS, tag);
+        Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+        if (text !== undefined) el.textContent = text;
+        return el;
+      }
+
+      function renderTree() {
+        const cols = summary.columns;
+        const headIdx = cols.indexOf('HEAD');
+        const relIdx = cols.indexOf('DEPREL');
+        const formIdx = cols.indexOf('FORM');
+        const uposIdx = cols.indexOf('UPOS');
+
+        treeScroll.innerHTML = '';
+        if (headIdx < 0) { hide(treeBlock); return; }
+        show(treeBlock);
+
+        const tokens = sentence.rows.filter(function (r) { return r.kind === 'token'; });
+        if (tokens.length === 0) {
+          treeScroll.innerHTML = '<div class="tree-empty">This sentence has no tokens.</div>';
+          return;
+        }
+
+        // Word widths, then the gap after each word: wide enough for the label of an arc to its neighbour.
+        const GAP = 26;
+        measureContext.font = '13px "IBM Plex Mono", monospace';
+        const widths = tokens.map(function (t) {
+          const form = formIdx >= 0 && t.fields[formIdx] !== null ? t.fields[formIdx] : '_';
+          const upos = uposIdx >= 0 && t.fields[uposIdx] !== null ? t.fields[uposIdx] : '';
+          return Math.max(measureContext.measureText(form).width, measureContext.measureText(upos).width * 0.82, 18);
+        });
+        measureContext.font = '11px "IBM Plex Mono", monospace';
+        const gaps = widths.map(function () { return GAP; });
+        tokens.forEach(function (t, i) {
+          const head = Number(t.fields[headIdx]);
+          const neighbour = head === Number(t.id) - 1 ? i - 1 : head === Number(t.id) + 1 ? i + 1 : -1;
+          if (neighbour < 0 || neighbour >= tokens.length || relIdx < 0 || t.fields[relIdx] === null) return;
+          const left = Math.min(i, neighbour);
+          const needed = measureContext.measureText(t.fields[relIdx]).width + 26;
+          const have = widths[left] / 2 + gaps[left] + widths[left + 1] / 2;
+          if (needed > have) gaps[left] += needed - have;
+        });
+
+        let x = 24;
+        const nodes = new Map();
+        tokens.forEach(function (t, i) {
+          const id = Number(t.id);
+          const form = formIdx >= 0 && t.fields[formIdx] !== null ? t.fields[formIdx] : '_';
+          const upos = uposIdx >= 0 && t.fields[uposIdx] !== null ? t.fields[uposIdx] : '';
+          nodes.set(id, { id: id, form: form, upos: upos, cx: x + widths[i] / 2 });
+          x += widths[i] + gaps[i];
+        });
+        const width = x;
+
+        const arcs = [];
+        tokens.forEach(function (t) {
+          const value = t.fields[headIdx];
+          if (value === null) return;
+          const head = Number(value);
+          const dep = Number(t.id);
+          if (!Number.isInteger(head) || (head !== 0 && !nodes.has(head))) return;
+          arcs.push({ dep: dep, head: head, label: relIdx >= 0 && t.fields[relIdx] !== null ? t.fields[relIdx] : '' });
+        });
+
+        // Height level: one above the highest arc nested inside.
+        const spanArcs = arcs.filter(function (a) { return a.head !== 0; });
+        spanArcs.forEach(function (a) { a.lo = Math.min(a.dep, a.head); a.hi = Math.max(a.dep, a.head); });
+        spanArcs.sort(function (a, b) { return (a.hi - a.lo) - (b.hi - b.lo); });
+        let maxLevel = 0;
+        spanArcs.forEach(function (a, i) {
+          let level = 1;
+          for (let j = 0; j < i; ++j) {
+            const b = spanArcs[j];
+            if (b.lo >= a.lo && b.hi <= a.hi) level = Math.max(level, b.level + 1);
           }
-          return ParserModule.__cwrapped[fn](text);
-        }
-        throw new Error('Could not find "' + fn + '" on the parser module. Check CONFIG.parseFunctionName and your Emscripten binding.');
-      }
+          a.level = level;
+          maxLevel = Math.max(maxLevel, level);
+        });
 
-      async function processFile(file) {
-        if (!ParserModule) { setStatus('Parser is still loading…'); return; }
-        setStatus('Parsing ' + file.name + '…');
-        hideAllStates();
+        const LEVEL_H = 24;
+        const TOP = 26;
+        const baseY = TOP + Math.max(maxLevel, 1) * LEVEL_H + 8;
+        const height = baseY + 44;
 
-        try {
-          const text = await file.text();
-          const t0 = performance.now();
-          const raw = callParser(text);
-          const parseDurationMs = performance.now() - t0;
-          const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const root = svg('svg', { width: width, height: height, viewBox: '0 0 ' + width + ' ' + height });
 
-          if (!result || result.ok !== true) {
-            const message = (result && result.error) ? result.error : 'Unknown parsing error.';
-            showError(file.name, (result && result.line) ? message + ' (sentence starting at line ' + result.line + ')' : message);
-            return;
+        const arcLayer = svg('g', {});
+        const labelLayer = svg('g', {});
+        root.appendChild(arcLayer);
+
+        arcs.forEach(function (a) {
+          const depNode = nodes.get(a.dep);
+          const attrs = { 'data-dep': a.dep, 'data-head': a.head };
+          let path;
+          let labelX;
+          let labelY;
+
+          if (a.head === 0) {
+            path = 'M' + depNode.cx + ',' + 6 + ' V' + (baseY - 6);
+            labelX = depNode.cx;
+            labelY = 14;
+          } else {
+            const headNode = nodes.get(a.head);
+            const top = baseY - a.level * LEVEL_H;
+            const dir = a.dep > a.head ? 1 : -1;
+            const x1 = headNode.cx + dir * 4;
+            const x2 = depNode.cx;
+            const r = Math.min(6, Math.abs(x2 - x1) / 2);
+            path = 'M' + x1 + ',' + baseY + ' V' + (top + r) +
+              ' Q' + x1 + ',' + top + ' ' + (x1 + dir * r) + ',' + top +
+              ' H' + (x2 - dir * r) +
+              ' Q' + x2 + ',' + top + ' ' + x2 + ',' + (top + r) +
+              ' V' + (baseY - 6);
+            labelX = (x1 + x2) / 2;
+            labelY = top + 4;
           }
-          currentFileName = file.name;
-          renderResults(result, parseDurationMs);
-        } catch (err) {
-          showError(file.name, err && err.message ? err.message : String(err));
-        } finally {
-          setStatus('Ready — choose a CoNLL-U file');
-        }
+
+          arcLayer.appendChild(svg('path', Object.assign({ class: 'tree-arc', d: path }, attrs)));
+          arcLayer.appendChild(svg('path', Object.assign({
+            class: 'tree-arrow',
+            d: 'M' + (depNode.cx - 3.5) + ',' + (baseY - 7) + ' L' + (depNode.cx + 3.5) + ',' + (baseY - 7) + ' L' + depNode.cx + ',' + (baseY - 1) + ' Z'
+          }, attrs)));
+          if (a.label) {
+            labelLayer.appendChild(svg('text', Object.assign({ class: 'tree-label', x: labelX, y: labelY }, attrs), a.label));
+          }
+        });
+        root.appendChild(labelLayer);
+
+        nodes.forEach(function (n) {
+          const g = svg('g', { class: 'tree-node', 'data-id': n.id });
+          g.appendChild(svg('title', {}, n.id + ' ' + n.form));
+          g.appendChild(svg('text', { class: 'tree-form', x: n.cx, y: baseY + 16 }, n.form));
+          if (n.upos) g.appendChild(svg('text', { class: 'tree-upos', x: n.cx, y: baseY + 32 }, n.upos));
+          g.addEventListener('mouseenter', function () { highlight(n.id); });
+          g.addEventListener('mouseleave', function () { highlight(null); });
+          root.appendChild(g);
+        });
+
+        treeScroll.appendChild(root);
       }
 
-      function showError(fileName, message) {
-        hideAllStates();
-        errorFileName.textContent = fileName;
-        errorMessage.textContent = message;
-        show(errorPanel);
+      function highlight(id) {
+        document.querySelectorAll('.is-hl').forEach(function (el) { el.classList.remove('is-hl'); });
+        if (id === null) return;
+
+        treeScroll.querySelectorAll('[data-dep="' + id + '"]').forEach(function (el) { el.classList.add('is-hl'); });
+        const node = treeScroll.querySelector('.tree-node[data-id="' + id + '"]');
+        if (node) node.classList.add('is-hl');
+        const row = tokenTable.querySelector('tr.row-token[data-id="' + id + '"]');
+        if (row) row.classList.add('is-hl');
       }
+
+      // Table
+
+      function renderTable() {
+        const cols = summary.columns;
+        let html = '<thead><tr>' + cols.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>';
+
+        sentence.rows.forEach(function (row) {
+          html += '<tr class="row-' + row.kind + '" data-id="' + escapeHtml(row.id) + '">';
+          cols.forEach(function (col, i) {
+            const value = row.fields[i];
+            const classes = [];
+            if (value === null) classes.push('is-unset');
+            if (col !== 'ID') classes.push('is-editable');
+            html += '<td class="' + classes.join(' ') + '" data-col="' + i + '">' + escapeHtml(value === null ? '_' : value) + '</td>';
+          });
+          html += '<td class="row-actions">' +
+            (row.kind === 'token' ? '<button class="row-remove" type="button" title="Remove token ' + escapeHtml(row.id) + '">×</button>' : '') +
+            '</td></tr>';
+        });
+
+        tokenTable.innerHTML = html + '</tbody>';
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function beginEdit(td) {
+        if (td.classList.contains('is-editing')) return;
+        const tr = td.parentElement;
+        const col = summary.columns[Number(td.dataset.col)];
+        const rowData = sentence.rows.find(function (r) { return r.id === tr.dataset.id; });
+        const original = rowData ? rowData.fields[Number(td.dataset.col)] : null;
+
+        const input = document.createElement('input');
+        input.value = original === null ? '' : original;
+        td.classList.add('is-editing');
+        td.textContent = '';
+        td.appendChild(input);
+        input.focus();
+        input.select();
+
+        let done = false;
+        function finish(commit) {
+          if (done) return;
+          done = true;
+          if (commit && input.value !== (original === null ? '' : original)) {
+            mutate({ type: 'set', index: sentence.index, row: tr.dataset.id, column: col, value: input.value });
+          } else {
+            renderTable();
+          }
+        }
+
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+        input.addEventListener('blur', function () { finish(true); });
+      }
+
+      async function mutate(message) {
+        const result = await request(message);
+        if (result.sentence && result.sentence.ok) sentence = result.sentence;
+        if (result.stats) renderStats(result.stats);
+        renderDetail();
+
+        if (!result.ok) {
+          if (!result.dependents) toast(result.error, { error: true });
+          return result;
+        }
+
+        editedChip.hidden = false;
+        return result;
+      }
+
+      tokenTable.addEventListener('dblclick', function (e) {
+        const td = e.target.closest('td');
+        if (!td || td.classList.contains('row-actions') || td.classList.contains('is-editing')) return;
+        if (!td.classList.contains('is-editable')) {
+          toast('IDs are assigned by the library and renumbered automatically.');
+          return;
+        }
+        beginEdit(td);
+      });
+
+      tokenTable.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.row-remove');
+        if (!btn) return;
+        const id = Number(btn.closest('tr').dataset.id);
+
+        const result = await mutate({ type: 'remove', index: sentence.index, token: id, detach: false });
+        if (result.dependents &&
+            confirm('Other tokens have token ' + id + ' as their HEAD. Remove it anyway and detach them?')) {
+          await mutate({ type: 'remove', index: sentence.index, token: id, detach: true });
+        }
+      });
+
+      tokenTable.addEventListener('mouseover', function (e) {
+        const tr = e.target.closest('tr.row-token');
+        highlight(tr ? Number(tr.dataset.id) : null);
+      });
+      tokenTable.addEventListener('mouseleave', function () { highlight(null); });
+
+      $('addTokenBtn').addEventListener('click', async function () {
+        if (!sentence) return;
+        const result = await mutate({ type: 'add', index: sentence.index });
+        if (result.ok) toast('Token added at the end. Double-click its cells to fill them in.');
+      });
+
+      // Treebank actions
+
+      $('validateBtn').addEventListener('click', async function () {
+        const result = await request({ type: 'validate' });
+        if (result.ok) {
+          toast('The treebank is valid.');
+          return;
+        }
+        const s = summary.sentences[result.index];
+        toast('Sentence ' + (result.index + 1) + ' (' + s.id + '): ' + result.error, {
+          error: true,
+          action: { label: 'Show', run: function () { selectSentence(result.index); } }
+        });
+      });
+
+      $('downloadBtn').addEventListener('click', async function () {
+        const btn = this;
+        btn.disabled = true;
+        const result = await request({ type: 'write' });
+        btn.disabled = false;
+
+        const blob = new Blob([result.text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (fileName ? fileName.replace(/\s*\(.*\)$/, '').replace(/^\[[^\]]*\]\s*/, '').replace(/\.[^.]+$/, '') : 'treebank') + '.conllu';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      $('closeBtn').addEventListener('click', function () {
+        if (!editedChip.hidden && !confirm('Discard your edits?')) return;
+        summary = null;
+        sentence = null;
+        showOnly(emptyState);
+      });
+
+      $('errorBackBtn').addEventListener('click', function () { showOnly(emptyState); });
+
+      // Sentence list
+
+      sentenceItems.addEventListener('click', function (e) {
+        const item = e.target.closest('.sentence-item');
+        if (item) selectSentence(Number(item.dataset.idx));
+      });
+
+      let filterTimer = 0;
+      sentenceFilter.addEventListener('input', function () {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(function () {
+          renderSentenceList();
+          if (visibleIndices.length > 0 && (!sentence || visibleIndices.indexOf(sentence.index) === -1)) {
+            selectSentence(visibleIndices[0]);
+          }
+        }, 120);
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (!summary || resultsView.hidden || pasteDialog.open) return;
+        if (e.target instanceof Element && e.target.matches('input, textarea')) return;
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+
+        const pos = visibleIndices.indexOf(sentence ? sentence.index : -1);
+        const next = visibleIndices[pos + (e.key === 'ArrowDown' ? 1 : -1)];
+        if (next !== undefined) {
+          e.preventDefault();
+          selectSentence(next);
+        }
+      });
+
+      // Input
 
       fileInput.addEventListener('change', function () {
         const file = fileInput.files && fileInput.files[0];
-        if (file) processFile(file);
+        if (file) parseSource({ name: file.name, blob: file });
         fileInput.value = '';
       });
 
@@ -785,221 +1463,38 @@
         e.preventDefault();
         dropZone.classList.remove('is-dragover');
         const file = e.dataTransfer.files && e.dataTransfer.files[0];
-        if (file) processFile(file);
+        if (file) parseSource({ name: file.name, blob: file });
       });
 
-      function padFields(fields, n) {
-        const arr = Array.isArray(fields) ? fields.slice() : [];
-        while (arr.length < n) arr.push('');
-        return arr;
+      function openPaste() {
+        if (!ready) return;
+        pasteDialog.showModal();
+        pasteText.focus();
       }
+      pasteBtn.addEventListener('click', openPaste);
+      pasteLink.addEventListener('click', openPaste);
 
-      function escapeHtml(str) {
-        return String(str)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
-
-      function formatDuration(ms) {
-        if (ms < 1000) return Math.round(ms) + ' ms';
-        return (ms / 1000).toFixed(2) + ' s';
-      }
-
-      function renderResults(result, parseDurationMs) {
-        currentResult = result;
-        currentSentenceIdx = 0;
-        currentView = 'tokens';
-        viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.view === 'tokens'); });
-
-        const columns = result.columns || [];
-        const sentences = result.sentences || [];
-
-        let tokenCount = 0;
-        sentences.forEach(function (s) {
-          tokenCount += (s.tokens || []).length;
-        });
-
-        statSentences.textContent = sentences.length;
-        statTokens.textContent = tokenCount;
-        statParseTime.textContent = formatDuration(parseDurationMs || 0);
-
-        columnsChips.innerHTML = '';
-        columns.forEach(function (col) {
-          const chip = document.createElement('span');
-          chip.className = 'chip';
-          chip.textContent = col;
-          columnsChips.appendChild(chip);
-        });
-
-        sentenceFilter.value = '';
-        renderSentenceList('');
-        if (sentences.length > 0) {
-          selectSentence(0);
-        } else {
-          detailTitle.textContent = 'No sentences found';
-          metadataBlock.innerHTML = '';
-          tokenTable.innerHTML = '';
-        }
-
-        hideAllStates();
-        show(resultsView);
-      }
-
-      function findFormIndex() {
-        if (!currentResult) return 1;
-        const idx = (currentResult.columns || []).indexOf('FORM');
-        return idx >= 0 ? idx : 1;
-      }
-
-      function sentenceLabel(sentence) {
-        const meta = sentence.metadata || [];
-        const textMeta = meta.find(function (m) { return m.key === 'text'; });
-        if (textMeta && textMeta.value) return textMeta.value;
-
-        const formIdx = findFormIndex();
-        const words = sentence.words || [];
-        if (words.length > 0) {
-          return words.map(function (w) { return (w && w[formIdx]) || ''; }).join(' ').trim();
-        }
-        return '';
-      }
-
-      function renderSentenceList(filterText) {
-        const sentences = (currentResult && currentResult.sentences) || [];
-        const needle = (filterText || '').trim().toLowerCase();
-
-        visibleIndices = [];
-        sentenceItems.innerHTML = '';
-
-        sentences.forEach(function (sentence, idx) {
-          const label = sentenceLabel(sentence);
-          if (needle) {
-            const meta = sentence.metadata || [];
-            const hay = (label + ' ' + meta.map(function (m) { return m.key + ' ' + m.value; }).join(' ')).toLowerCase();
-            if (hay.indexOf(needle) === -1) return;
-          }
-          visibleIndices.push(idx);
-
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'sentence-item' + (idx === currentSentenceIdx ? ' active' : '');
-          btn.dataset.idx = idx;
-          btn.innerHTML =
-            '<span class="idx">' + (idx + 1) + '</span>' +
-            '<span class="preview">' + escapeHtml(label || '(no text metadata)') + '</span>';
-          btn.addEventListener('click', function () { selectSentence(idx); });
-          sentenceItems.appendChild(btn);
-        });
-
-        if (visibleIndices.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'no-matches';
-          empty.textContent = 'No sentences match "' + filterText + '"';
-          sentenceItems.appendChild(empty);
-        }
-      }
-
-      function selectSentence(idx) {
-        currentSentenceIdx = idx;
-        document.querySelectorAll('.sentence-item').forEach(function (el) {
-          el.classList.toggle('active', Number(el.dataset.idx) === idx);
-        });
-        renderDetail();
-      }
-
-      function renderDetail() {
-        if (!currentResult) return;
-        const sentence = currentResult.sentences[currentSentenceIdx];
-        if (!sentence) return;
-
-        detailTitle.textContent = 'Sentence ' + (currentSentenceIdx + 1) + ' of ' + currentResult.sentences.length;
-
-        tokensToggleBtn.textContent = 'Tokens (' + (sentence.tokens || []).length + ')';
-        wordsToggleBtn.textContent = 'Words (' + (sentence.words || []).length + ')';
-
-        const meta = sentence.metadata || [];
-        if (meta.length === 0) {
-          metadataBlock.innerHTML = '<div class="no-metadata">No metadata on this sentence</div>';
-        } else {
-          const rows = meta.map(function (m) {
-            return '<div class="metadata-row"><span class="key"># ' + escapeHtml(m.key) + '</span><span class="value">' + escapeHtml(m.value) + '</span></div>';
-          }).join('');
-          metadataBlock.innerHTML =
-            '<details' + (meta.length <= 4 ? ' open' : '') + '>' +
-            '<summary>Metadata (' + meta.length + ')</summary>' +
-            '<div class="metadata-content">' + rows + '</div>' +
-            '</details>';
-        }
-
-        renderTable(sentence);
-      }
-
-      function renderTable(sentence) {
-        const columns = currentResult.columns || [];
-        const thead = '<thead><tr>' + columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead>';
-
-        let rowsHtml = '';
-
-        if (currentView === 'tokens') {
-          (sentence.empty_nodes || []).forEach(function (en) {
-            const enFields = padFields(en.fields, columns.length);
-            rowsHtml += '<tr class="row-empty">' + enFields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
-          });
-
-          const tokens = sentence.tokens || [];
-          tokens.forEach(function (token) {
-            const fields = padFields(token.fields, columns.length);
-            rowsHtml += '<tr class="row-token">' + fields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
-            (token.empty_nodes || []).forEach(function (en) {
-              const enFields = padFields(en.fields, columns.length);
-              rowsHtml += '<tr class="row-empty">' + enFields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
-            });
-          });
-        } else {
-          const words = sentence.words || [];
-          words.forEach(function (word) {
-            const fields = padFields(word, columns.length);
-            rowsHtml += '<tr class="row-word">' + fields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
-          });
-        }
-
-        tokenTable.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
-      }
-
-      viewToggleBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          currentView = btn.dataset.view;
-          viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
-          renderDetail();
-        });
+      $('pasteExampleBtn').addEventListener('click', function () {
+        pasteText.value = EXAMPLE;
+        pasteText.focus();
       });
 
-      sentenceFilter.addEventListener('input', function () {
-        renderSentenceList(sentenceFilter.value);
-        if (visibleIndices.length > 0 && visibleIndices.indexOf(currentSentenceIdx) === -1) {
-          selectSentence(visibleIndices[0]);
+      pasteText.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = pasteText.selectionStart;
+          pasteText.setRangeText('\t', start, pasteText.selectionEnd, 'end');
         }
       });
 
-      exportBtn.addEventListener('click', function () {
-        if (!currentResult) return;
-        const blob = new Blob([JSON.stringify(currentResult, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const base = currentFileName ? currentFileName.replace(/\.[^.]+$/, '') : 'conllu';
-        a.href = url;
-        a.download = base + '.parsed.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+      pasteDialog.addEventListener('close', function () {
+        if (pasteDialog.returnValue === 'parse' && pasteText.value.trim()) {
+          parseSource({ name: 'Pasted text', text: pasteText.value });
+        }
       });
 
-      closeBtn.addEventListener('click', function() {
-        window.location.reload();
-      });
-
+      startWorker();
+      loadSamples();
     })();
 </script>
 </body>

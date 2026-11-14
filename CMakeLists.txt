@@ -126,7 +126,7 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_DEMO AND EMSCRIPTEN)
             "--bind"
             "-sMODULARIZE=1"
             "-sEXPORT_NAME=createConlluDemoModule"
-            "-sENVIRONMENT=web"
+            "-sENVIRONMENT=web,worker"
             "-sALLOW_MEMORY_GROWTH=1"
     )
 

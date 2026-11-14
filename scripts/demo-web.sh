@@ -15,6 +15,7 @@ emmake cmake --build ../.emscripten-build --target CoNLL-U-demo
 
 cp ../demo/demo.html ../demo/.dist/index.html
 cp ../demo/demo.json ../demo/.dist/demo.json
+cp ../demo/worker.js ../demo/.dist/worker.js
 
 mkdir ../demo/.dist/data
 cp -r ../tests/.data/**.conllu ../demo/.dist/data

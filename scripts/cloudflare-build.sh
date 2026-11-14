@@ -56,6 +56,6 @@ cmake --build ../.docs-build --target CoNLL-U-docs
 
 bash pages.sh
 
-for file in index.html conllu.js conllu.wasm demo.json api/index.html; do
+for file in index.html worker.js conllu.js conllu.wasm demo.json api/index.html; do
     test -f "$ROOT/.pages/$file" || { echo "missing .pages/$file" >&2; exit 1; }
 done
