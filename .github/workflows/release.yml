@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build-test-publish:
-    if: github.event.release.target_commitish == 'v0'
+    if: github.event.release.target_commitish == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
