@@ -15,31 +15,31 @@
 
 namespace tg::conllu::internal {
     template <char C>
-    inline constexpr void trim_start(std::string_view &str) noexcept {
+    inline constexpr void trim_start(std::string_view& str) noexcept {
         while (!str.empty() && C == str[std::size_t{0}])
             str.remove_prefix(std::size_t{1});
     }
     template <char C>
-    inline constexpr void trim_end(std::string_view &str) noexcept {
+    inline constexpr void trim_end(std::string_view& str) noexcept {
         while (!str.empty() && C == str.back())
             str.remove_suffix(std::size_t{1});
     }
     template <char C>
-    inline constexpr void trim(std::string_view &str) noexcept {
+    inline constexpr void trim(std::string_view& str) noexcept {
         trim_start<C>(str);
         trim_end<C>(str);
     }
 
     template <typename NumberType>
         requires std::is_integral_v<NumberType>
-    inline constexpr bool parse_number(const std::string_view str, NumberType &number) noexcept {
+    inline constexpr bool parse_number(const std::string_view str, NumberType& number) noexcept {
         const auto res = std::from_chars(str.data(), str.data() + str.size(), number);
         return (std::errc() == res.ec) && (res.ptr == (str.data() + str.size()));
     }
 
     template <char Delimiter, bool Strict>
-    inline constexpr bool split(const std::string_view str, std::string_view &first,
-                                std::string_view &second) noexcept {
+    inline constexpr bool split(const std::string_view str, std::string_view& first,
+                                std::string_view& second) noexcept {
         const std::size_t pos = str.find(Delimiter);
         if (std::string_view::npos == pos) {
             if constexpr (Strict) {
@@ -58,7 +58,7 @@ namespace tg::conllu::internal {
 
     template <char Delimiter, typename NumberType>
         requires std::is_integral_v<NumberType> && std::is_unsigned_v<NumberType>
-    inline constexpr bool split_and_parse(const std::string_view str, NumberType &first, NumberType &second) noexcept {
+    inline constexpr bool split_and_parse(const std::string_view str, NumberType& first, NumberType& second) noexcept {
         std::pair<std::string_view, std::string_view> sv{};
         if (!split<Delimiter, true>(str, sv.first, sv.second))
             return false;

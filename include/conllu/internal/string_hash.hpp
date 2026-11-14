@@ -19,7 +19,7 @@ namespace tg::conllu::internal {
         using is_transparent = void;
 
         constexpr std::size_t operator()(std::string_view sv) const noexcept;
-        constexpr std::size_t operator()(const std::string &s) const noexcept;
+        constexpr std::size_t operator()(const std::string& s) const noexcept;
     };
 } // namespace tg::conllu::internal
 
