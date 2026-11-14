@@ -31,7 +31,7 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Running tests (ctest)
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --no-tests=error
 
       - name: Generating single header
         working-directory: scripts

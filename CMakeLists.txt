@@ -9,7 +9,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Cmake configuration
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.21...3.30)
 
 # Project definition
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/.version" CoNLL_U_VERSION_STRING)
@@ -21,6 +21,13 @@ project(CoNLL-U
         HOMEPAGE_URL "https://conll-u.tugrulgungor.me"
 )
 
+# Options
+if (PROJECT_IS_TOP_LEVEL)
+    option(BUILD_TESTS "Build the CoNLL-U unit tests (requires GoogleTest)" OFF)
+    option(BUILD_DOCS "Build the CoNLL-U API documentation (requires Doxygen)" OFF)
+    option(BUILD_DEMO "Build the CoNLL-U web demo (requires Emscripten)" OFF)
+endif ()
+
 # Project directories
 set(CoNLL_U_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -28,11 +35,10 @@ set(CoNLL_U_INCLUDE_DIR ${CoNLL_U_ROOT_DIR}/include)
 
 # Library
 set(CoNLL_U_LIBRARY_NAME ${PROJECT_NAME})
-set(CoNLL_U_COMPILE_DEFINITIONS "")
-
-file(GLOB_RECURSE CoNLL_U_LIBRARY_HEADERS ${CoNLL_U_INCLUDE_DIR}/*.*)
+set(CoNLL_U_NAMESPACE tg::conllu::)
 
 add_library(${CoNLL_U_LIBRARY_NAME} INTERFACE)
+add_library(${CoNLL_U_NAMESPACE}${CoNLL_U_LIBRARY_NAME} ALIAS ${CoNLL_U_LIBRARY_NAME})
 
 target_include_directories(${CoNLL_U_LIBRARY_NAME}
         INTERFACE
@@ -48,7 +54,11 @@ set(CoNLL_U_DOCS_DIR ${CoNLL_U_ROOT_DIR}/docs)
 set(CoNLL_U_DOCS_CONFIG_FILE_OUT ${CoNLL_U_DOCS_DIR}/Doxyfile)
 set(CoNLL_U_DOCS_CONFIG_FILE_IN ${CoNLL_U_ROOT_DIR}/Doxyfile.in)
 
-if (BUILD_DOCS)
+if (PROJECT_IS_TOP_LEVEL AND BUILD_DOCS)
+    if (CMAKE_VERSION VERSION_LESS 3.27)
+        message(FATAL_ERROR "BUILD_DOCS requires CMake 3.27 or newer (doxygen_add_docs CONFIG_FILE)")
+    endif ()
+
     find_package(Doxygen REQUIRED)
 
     include(FetchContent)
@@ -74,7 +84,7 @@ endif ()
 set(CoNLL_U_TESTS_DIR ${CoNLL_U_ROOT_DIR}/tests)
 set(CoNLL_U_TESTS_DATA_DIR ${CoNLL_U_TESTS_DIR}/.data)
 
-if (BUILD_TESTS)
+if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTS)
     find_package(GTest REQUIRED)
 
     enable_testing()
@@ -86,7 +96,7 @@ if (BUILD_TESTS)
         if (IS_DIRECTORY "${CoNLL_U_TEST_MODULE_PATH}")
             get_filename_component(CoNLL_U_TEST_MODULE_NAME "${CoNLL_U_TEST_MODULE_PATH}" NAME)
 
-            file(GLOB_RECURSE CoNLL_U_TEST_MODULE_TARGETS ${CoNLL_U_TEST_MODULE_PATH}/*.cpp)
+            file(GLOB_RECURSE CoNLL_U_TEST_MODULE_TARGETS CONFIGURE_DEPENDS ${CoNLL_U_TEST_MODULE_PATH}/*.cpp)
             if ("${CoNLL_U_TEST_MODULE_TARGETS}" STREQUAL "")
                 continue()
             endif ()
@@ -94,11 +104,12 @@ if (BUILD_TESTS)
             set(CoNLL_U_TEST_TARGET_NAME "${CoNLL_U_LIBRARY_NAME}-${CoNLL_U_TEST_MODULE_NAME}-tests")
 
             add_executable(${CoNLL_U_TEST_TARGET_NAME} ${CoNLL_U_TEST_MODULE_TARGETS})
-            target_include_directories(${CoNLL_U_TEST_TARGET_NAME} PRIVATE ${CoNLL_U_INCLUDE_DIR})
-            target_link_libraries(${CoNLL_U_TEST_TARGET_NAME} PRIVATE ${CoNLL_U_LIBRARY_NAME} GTest::gtest GTest::gtest_main)
-            target_compile_definitions(${CoNLL_U_TEST_TARGET_NAME} PRIVATE -DCoNLL_U_TESTS_DATA_DIR="${CoNLL_U_TESTS_DATA_DIR}")
+            target_link_libraries(${CoNLL_U_TEST_TARGET_NAME}
+                    PRIVATE ${CoNLL_U_NAMESPACE}${CoNLL_U_LIBRARY_NAME} GTest::gtest GTest::gtest_main)
+            target_compile_definitions(${CoNLL_U_TEST_TARGET_NAME}
+                    PRIVATE CoNLL_U_TESTS_DATA_DIR="${CoNLL_U_TESTS_DATA_DIR}")
 
-            gtest_discover_tests(${CoNLL_U_TEST_TARGET_NAME})
+            gtest_discover_tests(${CoNLL_U_TEST_TARGET_NAME} DISCOVERY_MODE PRE_TEST)
         endif ()
     endforeach ()
 endif ()
@@ -107,10 +118,9 @@ endif ()
 set(CoNLL_U_DEMO_DIR ${CoNLL_U_ROOT_DIR}/demo)
 set(CoNLL_U_DEMO_TARGET_NAME ${CoNLL_U_LIBRARY_NAME}-demo)
 
-if (BUILD_DEMO AND EMSCRIPTEN)
+if (PROJECT_IS_TOP_LEVEL AND BUILD_DEMO AND EMSCRIPTEN)
     add_executable(${CoNLL_U_DEMO_TARGET_NAME} ${CoNLL_U_DEMO_DIR}/demo.cpp)
-    target_include_directories(${CoNLL_U_DEMO_TARGET_NAME} PRIVATE ${CoNLL_U_INCLUDE_DIR})
-    target_link_libraries(${CoNLL_U_DEMO_TARGET_NAME} PRIVATE ${CoNLL_U_LIBRARY_NAME})
+    target_link_libraries(${CoNLL_U_DEMO_TARGET_NAME} PRIVATE ${CoNLL_U_NAMESPACE}${CoNLL_U_LIBRARY_NAME})
 
     target_link_options(${CoNLL_U_DEMO_TARGET_NAME} PRIVATE
             "--bind"
@@ -128,18 +138,31 @@ endif ()
 
 # Installation
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
-install(DIRECTORY ${CoNLL_U_INCLUDE_DIR}
+set(CoNLL_U_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_DATADIR}/cmake/${CoNLL_U_LIBRARY_NAME})
+
+install(DIRECTORY ${CoNLL_U_INCLUDE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 install(TARGETS ${CoNLL_U_LIBRARY_NAME}
-        EXPORT "${CoNLL_U_LIBRARY_NAME}Targets"
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        EXPORT ${CoNLL_U_LIBRARY_NAME}Targets
 )
 
-install(EXPORT "${CoNLL_U_LIBRARY_NAME}Targets"
-        FILE "${CoNLL_U_LIBRARY_NAME}Targets.cmake"
-        NAMESPACE tg::conllu
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${CoNLL_U_LIBRARY_NAME}
+install(EXPORT ${CoNLL_U_LIBRARY_NAME}Targets
+        FILE ${CoNLL_U_LIBRARY_NAME}Config.cmake
+        NAMESPACE ${CoNLL_U_NAMESPACE}
+        DESTINATION ${CoNLL_U_INSTALL_CMAKE_DIR}
+)
+
+write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/${CoNLL_U_LIBRARY_NAME}ConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMinorVersion
+        ARCH_INDEPENDENT
+)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${CoNLL_U_LIBRARY_NAME}ConfigVersion.cmake
+        DESTINATION ${CoNLL_U_INSTALL_CMAKE_DIR}
 )
