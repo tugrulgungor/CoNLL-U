@@ -35,6 +35,11 @@ namespace tg::conllu {
             for (const auto& [key, value] : sentence->metadata_)
                 write_(output << "# " << key << " = " << value << "\n");
 
+            for (const Token* node : sentence->empty_nodes()) {
+                if (const auto err = write_token_(output, node))
+                    return err;
+            }
+
             const Word* last_word{nullptr};
             for (const Token* token : sentence->tokens()) {
                 const Word* word = token->get_word().value_or(nullptr);
@@ -65,7 +70,7 @@ namespace tg::conllu {
         }
     }
 
-    inline std::error_code Writer::write_token_(std::ostream& output, const Token* token) noexcept {
+    inline std::error_code Writer::write_token_(std::ostream& output, const Token* token) const noexcept {
         try {
             bool first{true};
             for (const auto& field : token->fields_) {
@@ -78,7 +83,7 @@ namespace tg::conllu {
                     write_(output << field.value());
                 }
                 else {
-                    write_(output << '_');
+                    write_(output << options_.empty_value_indicator);
                 }
             }
 

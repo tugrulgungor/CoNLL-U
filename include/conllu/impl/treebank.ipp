@@ -51,19 +51,29 @@ namespace tg::conllu {
 
         const std::size_t new_column_count = columns_.size() + std::size_t{1};
 
-        try {
+        // Visits every row that carries fields: sentence-level empty nodes, tokens, and tokens' empty nodes.
+        const auto for_each_row = [this](auto&& fn) {
             for (const std::unique_ptr<Sentence>& sentence : sentences_) {
-                for (const std::unique_ptr<Token>& token : sentence->tokens_)
-                    token->fields_.emplace_back(std::nullopt);
-            }
-        }
-        catch (...) {
-            for (const std::unique_ptr<Sentence>& sentence : sentences_) {
+                for (const std::unique_ptr<Token>& node : sentence->root_.empty_nodes_)
+                    fn(node.get());
+
                 for (const std::unique_ptr<Token>& token : sentence->tokens_) {
-                    if (new_column_count == token->fields_.size())
-                        token->fields_.pop_back();
+                    fn(token.get());
+
+                    for (const std::unique_ptr<Token>& node : token->empty_nodes_)
+                        fn(node.get());
                 }
             }
+        };
+
+        try {
+            for_each_row([](Token* row) { row->fields_.emplace_back(std::nullopt); });
+        }
+        catch (...) {
+            for_each_row([new_column_count](Token* row) noexcept {
+                if (new_column_count == row->fields_.size())
+                    row->fields_.pop_back();
+            });
 
             return std::unexpected(make_error_code(ErrorCode::InsufficientMemory));
         }
@@ -108,8 +118,11 @@ namespace tg::conllu {
             sentence->sent_id_.assign(sent_id);
             sentence->metadata_.emplace("sent_id", sent_id);
 
-            if (!text.empty())
+            // Mirrored in the metadata, like Sentence::set_text: that is what the Writer outputs.
+            if (!text.empty()) {
                 sentence->text_.assign(text);
+                sentence->metadata_.emplace("text", text);
+            }
 
             const auto ptr = sentence.get();
 

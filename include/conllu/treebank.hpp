@@ -41,8 +41,8 @@ namespace tg::conllu {
         std::vector<std::unique_ptr<Sentence>> sentences_{};
         std::unordered_map<std::string_view, std::size_t, internal::StringHash, std::equal_to<>> sentence_idx_{};
 
-        friend class Parser;
         friend class Sentence;
+        friend class StreamParser;
         friend class Token;
         friend class Word;
         friend class Writer;
@@ -175,7 +175,7 @@ namespace tg::conllu {
         /**
          * @brief Destructor.
          */
-        constexpr ~Treebank() noexcept = default;
+        ~Treebank() noexcept = default;
         /** @} */
     };
 } // namespace tg::conllu

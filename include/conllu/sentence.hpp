@@ -20,6 +20,7 @@
 #include "conllu/word.hpp"
 
 #include <expected>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -41,6 +42,12 @@ namespace tg::conllu {
         std::vector<std::unique_ptr<Token>> tokens_{};
         std::vector<std::unique_ptr<Word>> words_{};
 
+        /*
+         * Pseudo-token with ID 0 (the virtual root). It is never exposed and never written; it only owns the
+         * sentence-level empty nodes (0.1, 0.2, ...), so they can reuse Token's empty-node machinery as-is.
+         */
+        Token root_;
+
         Treebank* treebank_;
 
         static constexpr void split_metadata_line_(std::string_view& line, std::string_view& key,
@@ -56,7 +63,7 @@ namespace tg::conllu {
 
         explicit(true) constexpr Sentence(Treebank* treebank) noexcept;
 
-        friend class Parser;
+        friend class StreamParser;
         friend class Token;
         friend class Treebank;
         friend class Word;
@@ -156,6 +163,41 @@ namespace tg::conllu {
         constexpr void remove_all_tokens() noexcept;
         /** @} */
         /**
+         * @name Sentence-level empty nodes
+         */
+        /** @{ */
+        /**
+         * @brief View over the sentence-level empty nodes (IDs `0.1`, `0.2`, ...), in order. These precede the first
+         * token. For each of them, Token::is_empty_node is true and Token::get_parent is nullptr.
+         */
+        [[nodiscard]] constexpr auto empty_nodes() const noexcept;
+        /**
+         * @brief Number of sentence-level empty nodes.
+         */
+        [[nodiscard]] constexpr std::size_t empty_node_count() const noexcept;
+        /**
+         * @brief Constructs and appends a new sentence-level empty node.
+         * @return Pointer to the newly created empty node, or an error_code on failure.
+         */
+        [[nodiscard]] constexpr std::expected<Token*, std::error_code> add_empty_node() noexcept;
+        /**
+         * @brief Removes the sentence-level empty node with the given identifier (the part after `0.`).
+         * @param[in] id Identifier of the empty node to remove.
+         * @return Empty error_code on success, or an error describing the failure.
+         */
+        constexpr std::error_code remove_empty_node(TokenId id) noexcept;
+        /**
+         * @brief Removes the given sentence-level empty node.
+         * @param[in] node Pointer to the empty node to remove.
+         * @return Empty error_code on success, or an error describing the failure.
+         */
+        constexpr std::error_code remove_empty_node(Token* node) noexcept;
+        /**
+         * @brief Removes all sentence-level empty nodes.
+         */
+        constexpr void remove_all_empty_nodes() noexcept;
+        /** @} */
+        /**
          * @name Words
          */
         /** @{ */
@@ -249,7 +291,8 @@ namespace tg::conllu {
          */
         [[nodiscard]] constexpr bool empty() const noexcept;
         /**
-         * @brief Removes all tokens and metadata (except `sent_id`), resetting the sentence's content.
+         * @brief Removes all tokens, sentence-level empty nodes and metadata (except `sent_id`), resetting the
+         * sentence's content.
          */
         constexpr void clear() noexcept;
         /**
@@ -265,7 +308,7 @@ namespace tg::conllu {
         /**
          * @brief Destructor.
          */
-        constexpr ~Sentence() noexcept = default;
+        ~Sentence() noexcept = default;
         /** @} */
     };
 } // namespace tg::conllu

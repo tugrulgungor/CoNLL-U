@@ -19,6 +19,7 @@
 #include "conllu/error.hpp"
 #include "conllu/parser.hpp"
 #include "conllu/sentence.hpp"
+#include "conllu/stream_parser.hpp"
 #include "conllu/token.hpp"
 #include "conllu/treebank.hpp"
 #include "conllu/word.hpp"

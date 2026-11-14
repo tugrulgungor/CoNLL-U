@@ -131,6 +131,10 @@ namespace tg::conllu {
     }
 
     inline constexpr Token* Token::get_parent() const noexcept {
+        // Sentence-level empty nodes hang off the sentence's hidden root pseudo-token; do not leak it.
+        if (nullptr != parent_ && &sentence_->root_ == parent_)
+            return nullptr;
+
         return parent_;
     }
 
@@ -274,7 +278,8 @@ namespace tg::conllu {
 
             node->id_ = empty_nodes_.size() + TokenId{1};
 
-            node->fields_.resize(fields_.size(), std::nullopt);
+            // Sized from the treebank, not from this token: the sentence's root pseudo-token has no fields.
+            node->fields_.resize(sentence_->treebank_->num_columns(), std::nullopt);
 
             if (const auto id_idx_opt = sentence_->treebank_->get_column_pos("ID"); id_idx_opt.has_value())
                 node->fields_[id_idx_opt.value()] = std::format("{}.{}", id_, node->id_);
@@ -304,7 +309,7 @@ namespace tg::conllu {
                 ids.reserve(empty_nodes_.size() - id);
 
                 for (TokenId i = id; i < empty_nodes_.size(); ++i)
-                    ids.push_back(std::format("{}.{}", parent_->id_, i));
+                    ids.push_back(std::format("{}.{}", id_, i));
             }
             catch (...) {
                 return make_error_code(ErrorCode::InsufficientMemory);

@@ -43,6 +43,9 @@ namespace tg::conllu {
         if (!internal::is_sent_id_valid(sent_id))
             return make_error_code(ErrorCode::InvalidSentenceId);
 
+        if (sent_id == sent_id_)
+            return {};
+
         if (treebank_->sentence_idx_.contains(sent_id))
             return make_error_code(ErrorCode::DuplicateSentenceId);
 
@@ -102,7 +105,7 @@ namespace tg::conllu {
     }
 
     // Constructors
-    inline constexpr Sentence::Sentence(Treebank* treebank) noexcept : treebank_(treebank) {
+    inline constexpr Sentence::Sentence(Treebank* treebank) noexcept : root_(this, nullptr), treebank_(treebank) {
     }
 
     // Treebank
@@ -116,7 +119,8 @@ namespace tg::conllu {
     }
 
     inline constexpr std::error_code Sentence::set_sent_id(const std::string_view sent_id) noexcept {
-        return set_metadata("sent_id", sent_id);
+        // Not via set_metadata: it only adds new keys, and `sent_id` always exists.
+        return set_sent_id_(sent_id);
     }
 
     // Text
@@ -178,6 +182,24 @@ namespace tg::conllu {
             }
         }
 
+        // New ID column values for every token after the removed one (old ID i + 1 becomes i) and its empty nodes,
+        // built up front so that an allocation failure leaves the sentence untouched.
+        const auto id_idx_opt = treebank_->get_column_pos("ID");
+        std::vector<std::string> new_ids{};
+        if (id_idx_opt.has_value()) {
+            try {
+                for (std::size_t i = id; i < tokens_.size(); ++i) {
+                    new_ids.push_back(std::to_string(i));
+
+                    for (const std::unique_ptr<Token>& node : tokens_[i]->empty_nodes_)
+                        new_ids.push_back(std::format("{}.{}", i, node->id_));
+                }
+            }
+            catch (...) {
+                return make_error_code(ErrorCode::InsufficientMemory);
+            }
+        }
+
         auto it = tokens_.begin();
         std::advance(it, id - TokenId{1});
 
@@ -201,8 +223,18 @@ namespace tg::conllu {
         }
 
         it = tokens_.erase(it);
+        std::size_t new_id_idx{0};
         while (tokens_.end() != it) {
-            it->get()->id_--;
+            Token* token = it->get();
+            token->id_--;
+
+            if (id_idx_opt.has_value()) {
+                token->fields_[id_idx_opt.value()] = std::move(new_ids[new_id_idx++]);
+
+                for (const std::unique_ptr<Token>& node : token->empty_nodes_)
+                    node->fields_[id_idx_opt.value()] = std::move(new_ids[new_id_idx++]);
+            }
+
             std::advance(it, std::size_t{1});
         }
 
@@ -241,6 +273,33 @@ namespace tg::conllu {
     inline constexpr void Sentence::remove_all_tokens() noexcept {
         tokens_.clear();
         remove_all_words(false);
+    }
+
+    // Sentence-level empty nodes
+    inline constexpr auto Sentence::empty_nodes() const noexcept {
+        // Not forwarded to root_.empty_nodes(): its deduced return type is only known once token.ipp is included.
+        return std::views::transform(root_.empty_nodes_,
+                                     [](const std::unique_ptr<Token>& node) noexcept -> Token* { return node.get(); });
+    }
+
+    inline constexpr std::size_t Sentence::empty_node_count() const noexcept {
+        return root_.empty_node_count();
+    }
+
+    inline constexpr std::expected<Token*, std::error_code> Sentence::add_empty_node() noexcept {
+        return root_.add_empty_node();
+    }
+
+    inline constexpr std::error_code Sentence::remove_empty_node(const TokenId id) noexcept {
+        return root_.remove_empty_node(id);
+    }
+
+    inline constexpr std::error_code Sentence::remove_empty_node(Token* node) noexcept {
+        return root_.remove_empty_node(node);
+    }
+
+    inline constexpr void Sentence::remove_all_empty_nodes() noexcept {
+        root_.remove_all_empty_nodes();
     }
 
     inline constexpr auto Sentence::words() const noexcept {
@@ -404,10 +463,16 @@ namespace tg::conllu {
 
     inline constexpr void Sentence::clear() noexcept {
         remove_all_tokens();
+        remove_all_empty_nodes();
         remove_all_metadata();
     }
 
     inline constexpr std::error_code Sentence::validate() const noexcept {
+        for (const Token* node : empty_nodes()) {
+            if (const auto err = node->validate())
+                return err;
+        }
+
         for (const Word* word : words()) {
             if (const auto err = word->validate())
                 return err;

@@ -20,6 +20,7 @@
 #include <charconv>
 #include <expected>
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -48,22 +49,22 @@ namespace tg::conllu {
 
         std::vector<std::unique_ptr<Token>> empty_nodes_{};
 
-        Token *parent_{nullptr};
-        Sentence *sentence_{nullptr};
+        Token* parent_{nullptr};
+        Sentence* sentence_{nullptr};
 
         [[nodiscard]] constexpr std::optional<std::error_code> set_known_field_(
-        std::size_t position, std::string_view name, const std::optional<std::string_view> &value) noexcept;
+        std::size_t position, std::string_view name, const std::optional<std::string_view>& value) noexcept;
         [[nodiscard]] constexpr std::error_code set_field_value_(std::size_t position,
-                                                                 const std::optional<std::string_view> &value) noexcept;
+                                                                 const std::optional<std::string_view>& value) noexcept;
         [[nodiscard]] constexpr std::error_code set_field_value_(std::size_t position, std::string_view name,
-                                                                 const std::optional<std::string_view> &value) noexcept;
+                                                                 const std::optional<std::string_view>& value) noexcept;
 
-        [[nodiscard]] constexpr std::error_code set_head_(const std::optional<std::string_view> &value) noexcept;
+        [[nodiscard]] constexpr std::error_code set_head_(const std::optional<std::string_view>& value) noexcept;
 
-        explicit(true) constexpr Token(Sentence *sentence, Token *parent) noexcept;
+        explicit(true) constexpr Token(Sentence* sentence, Token* parent) noexcept;
 
-        friend class Parser;
         friend class Sentence;
+        friend class StreamParser;
         friend class Treebank;
         friend class Word;
         friend class Writer;
@@ -86,11 +87,12 @@ namespace tg::conllu {
         /**
          * @brief Pointer to the sentence that owns this token.
          */
-        [[nodiscard]] constexpr Sentence *sentence() const noexcept;
+        [[nodiscard]] constexpr Sentence* sentence() const noexcept;
         /**
-         * @brief Pointer to the parent token, or nullptr if this is not an empty node.
+         * @brief Pointer to the parent token, or nullptr if this is not an empty node or is a sentence-level empty node
+         *        (ID `0.N`, see Sentence::empty_nodes).
          */
-        [[nodiscard]] constexpr Token *get_parent() const noexcept;
+        [[nodiscard]] constexpr Token* get_parent() const noexcept;
         /**
          * @brief Token identifier. For an empty node, this is its position among its parent's empty nodes.
          */
@@ -99,7 +101,7 @@ namespace tg::conllu {
          * @brief Resolves the HEAD field to the referenced token.
          * @return Pointer to the head token, or std::nullopt if there is none (unset, root, or unresolvable).
          */
-        [[nodiscard]] constexpr std::optional<Token *> get_head() const noexcept;
+        [[nodiscard]] constexpr std::optional<Token*> get_head() const noexcept;
         /**
          * @brief Sets the HEAD field, linking this token to its syntactic head.
          * @param[in] id Identifier of the head token, or 0 to clear the head (root/unset). Must not equal this token's
@@ -116,7 +118,7 @@ namespace tg::conllu {
          * @return Pointer to the owning Word, or std::nullopt if this token is an empty node or is not part of any
          * word.
          */
-        [[nodiscard]] constexpr std::optional<Word *> get_word() const noexcept;
+        [[nodiscard]] constexpr std::optional<Word*> get_word() const noexcept;
         /**
          * @brief Whether this token belongs to a Word.
          */
@@ -189,7 +191,7 @@ namespace tg::conllu {
          * @brief Constructs and appends a new empty node.
          * @return Pointer to the newly created empty node, or an error_code on failure.
          */
-        [[nodiscard]] constexpr std::expected<Token *, std::error_code> add_empty_node() noexcept;
+        [[nodiscard]] constexpr std::expected<Token*, std::error_code> add_empty_node() noexcept;
         /**
          * @brief Removes the empty node with the given identifier.
          * @param[in] id Identifier of the empty node to remove.
@@ -201,7 +203,7 @@ namespace tg::conllu {
          * @param[in] node Pointer to the empty node to remove.
          * @return Empty error_code on success, or an error describing the failure.
          */
-        constexpr std::error_code remove_empty_node(Token *node) noexcept;
+        constexpr std::error_code remove_empty_node(Token* node) noexcept;
         /**
          * @brief Removes all empty nodes attached to this token.
          */

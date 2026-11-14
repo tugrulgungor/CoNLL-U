@@ -41,12 +41,12 @@ namespace tg::conllu {
     class Writer final {
         WriterOptions options_{};
 
-        [[nodiscard]] static std::error_code write_columns_(std::ostream &output, const Treebank *treebank) noexcept;
-        [[nodiscard]] std::error_code write_sentence_(std::ostream &output, const Sentence *sentence) const noexcept;
-        [[nodiscard]] static std::error_code write_token_(std::ostream &output, const Token *token) noexcept;
-        [[nodiscard]] std::error_code write_word_(std::ostream &output, const Word *word) const noexcept;
+        [[nodiscard]] static std::error_code write_columns_(std::ostream& output, const Treebank* treebank) noexcept;
+        [[nodiscard]] std::error_code write_sentence_(std::ostream& output, const Sentence* sentence) const noexcept;
+        [[nodiscard]] std::error_code write_token_(std::ostream& output, const Token* token) const noexcept;
+        [[nodiscard]] std::error_code write_word_(std::ostream& output, const Word* word) const noexcept;
 
-        static std::ostream &write_(std::ostream &output) noexcept(false);
+        static std::ostream& write_(std::ostream& output) noexcept(false);
 
     public:
         /**
@@ -73,7 +73,7 @@ namespace tg::conllu {
          * @param[in] stream Output stream to write to.
          * @return Empty error_code on success, or an error describing the first failure encountered.
          */
-        [[nodiscard]] std::error_code write(const Treebank *treebank, std::ostream &&stream) const noexcept;
+        [[nodiscard]] std::error_code write(const Treebank* treebank, std::ostream&& stream) const noexcept;
         /**
          * @brief Serializes @p treebank in CoNLL-U format and writes it to the file at @p path.
          * @param[in] treebank Treebank to serialize.
@@ -81,8 +81,8 @@ namespace tg::conllu {
          * @return Empty error_code on success, or an error describing why the file could not be
          * opened/written or why serialization failed.
          */
-        [[nodiscard]] std::error_code write_file(const Treebank *treebank,
-                                                 const std::filesystem::path &path) const noexcept;
+        [[nodiscard]] std::error_code write_file(const Treebank* treebank,
+                                                 const std::filesystem::path& path) const noexcept;
         /** @} */
         /**
          * @name Destructor
