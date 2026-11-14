@@ -1,28 +1,176 @@
 # CoNLL-U
 
-> A modern C++ (C++23) header-only library for reading, in-memory manipulation, and writing of [CoNLL-U](https://universaldependencies.org/format.html) formatted treebank data (Universal Dependencies format), including its [CoNLL-U Plus](https://universaldependencies.org/ext-format.html) extension with arbitrary, declared column sets. All public API lives in namespace `tg::conllu`.
+> Header-only C++23 library for reading, editing, and writing treebanks in the [CoNLL-U](https://universaldependencies.org/format.html) format of Universal Dependencies, including [CoNLL-U Plus](https://universaldependencies.org/ext-format.html) files with custom columns. Parse a file, string, byte buffer, stream, or arbitrary chunks of input into an in-memory `Treebank`; modify sentences, tokens, multiword tokens, and empty nodes; write it back out. Everything is in namespace `tg::conllu`, errors are reported as `std::error_code` (no exceptions), and almost every function is `noexcept`.
 
-Source: https://github.com/tugrulgungor/CoNLL-U
-Homepage: https://conll-u.tugrulgungor.me
-Author: Tuğrul Güngör
-License: MIT (https://opensource.org/license/mit/)
+- Source: https://github.com/tugrulgungor/CoNLL-U
+- Homepage and API reference: https://conll-u.tugrulgungor.me
+- License: MIT. Author: Tuğrul Güngör.
+- Requires C++23 (`<expected>`, `std::format`, ranges). Builds with GCC, Clang, and MSVC.
 
-The library is included via the umbrella header `conllu.hpp`, which pulls in all of the headers below. Error reporting throughout the API uses `std::error_code` / `std::expected<T, std::error_code>` rather than exceptions; most member functions are `noexcept`.
+## Getting it
 
-## Core headers
+The library is header-only; there is nothing to build or link.
 
-- [conllu.hpp](conllu.hpp): Umbrella header that includes every public header (`error.hpp`, `parser.hpp`, `sentence.hpp`, `token.hpp`, `treebank.hpp`, `word.hpp`, `writer.hpp`). Defines the `conllu` Doxygen group.
-- [conllu/treebank.hpp](conllu/treebank.hpp): Defines `Treebank`, the in-memory representation of a full CoNLL-U (or CoNLL-U Plus) treebank. Owns the ordered set of column names and the collection of `Sentence` objects. Because the column set is dynamic rather than fixed to the 10 standard CoNLL-U columns, `Treebank` naturally supports CoNLL-U Plus's declared, extensible columns (`add_column`, `get_column_pos`/`get_column_name`) alongside the standard format. Supports adding/looking up/removing columns and sentences, emptiness checks, structural `validate()`, and `clear()`. Copy/move construction and assignment are disabled — treebanks are managed through pointers/`std::unique_ptr`.
-- [conllu/sentence.hpp](conllu/sentence.hpp): Defines `Sentence`, a single sentence within a `Treebank`. Holds `sent_id`/`text` identity metadata, an arbitrary metadata key/value map, an ordered list of `Token`s, and an ordered list of `Word`s (multiword token groupings). Provides accessors/mutators for tokens, words, and metadata, plus `validate()` and `clear()`. Constructed only via `Treebank::add_sentence`.
-- [conllu/token.hpp](conllu/token.hpp): Defines `Token` (a single token within a `Sentence`, or an empty node within a `Token`) and the `TokenId` alias (`std::uint64_t`). Manages the ID, optional HEAD reference, per-column field values (by position or name), and nested empty nodes. Constructed only via `Sentence::add_token` or `Token::add_empty_node`.
-- [conllu/word.hpp](conllu/word.hpp): Defines `Word`, representing a multiword token: a contiguous span of two or more `Token`s sharing one surface form. Includes the nested `Word::Range` struct (closed inclusive `[first, last]` `TokenId` interval, with `count()`, `contains()`, `overlaps()`, `equals()`, and `is_valid()` helpers). `Word` exposes range, form, MISC, and typo-flag accessors, a view over its covered tokens, and `validate()`. Constructed only via `Sentence::add_word`.
-- [conllu/parser.hpp](conllu/parser.hpp): Defines `ParserOptions` (currently just the empty-value indicator character, default `_`) and `Parser`, which parses CoNLL-U (and CoNLL-U Plus, via an optional leading `# global.columns` declaration line) formatted text into a new `Treebank`. Supports parsing from an `std::istream`, a file path (`parse_file`), an in-memory `std::string_view` (`parse_memory`), or a raw byte buffer. All parsing entry points return `std::expected<std::unique_ptr<Treebank>, std::error_code>`.
-- [conllu/writer.hpp](conllu/writer.hpp): Defines `WriterOptions` (empty-value indicator character, default `_`) and `Writer`, which serializes a `Treebank` back into CoNLL-U formatted output — to an `std::ostream` (`write`) or directly to a file (`write_file`). Returns `std::error_code` describing the first failure, if any.
-- [conllu/error.hpp](conllu/error.hpp): Defines the `ErrorCode` enum used across parsing, writing, and treebank mutation (e.g. `StreamError`, `InsufficientMemory`, `PositionOutOfRange`, `InvalidColumnName`, `DuplicateColumnName`, `MissingSentenceId`, `DuplicateSentenceId`, `InvalidTokenId`, `TokenFieldCountMismatch`, `InvalidTokenHead`, `InvalidWordRange`, `OverlappingWordRange`, and more), plus `ErrorCategory` (the `std::error_category` implementation), `get_error_category()`, and `make_error_code()`. Specializes `std::is_error_code_enum` so `ErrorCode` interoperates with `std::error_code`.
+- **CMake, installed:** `cmake --install <build-dir> --prefix <prefix>`, then in your project `find_package(CoNLL-U REQUIRED)` and `target_link_libraries(app PRIVATE tg::conllu::CoNLL-U)`. Versions before 1.0 are only compatible within the same minor version (`find_package(CoNLL-U 0.1)`).
+- **CMake, vendored:** `add_subdirectory(CoNLL-U)` and link the same `tg::conllu::CoNLL-U` target. The library's `BUILD_TESTS`, `BUILD_DOCS`, and `BUILD_DEMO` options are ignored when it is not the top-level project.
+- **Single header:** download the `conllu.hpp` attached to each GitHub release.
+- **Manually:** add `include/` to the include path and compile as C++23.
 
-## Notes
+Then `#include <conllu.hpp>`.
 
-- Ownership/friendship: `Treebank`, `Sentence`, `Token`, and `Word` grant friendship to `Parser`, `Writer`, and each other so that construction and mutation stay encapsulated behind the public accessor API.
-- Many accessors are `constexpr` and return views (`std::string_view`, ranges over pointers) rather than owning copies.
-- Column/field access on `Token` works by both position (`std::size_t`) and column name (`std::string_view`).
-- Word lines in the CoNLL-U format may only carry ID, FORM, MISC, and a `Typo=Yes` FEATS flag; this is enforced via `ErrorCode::InvalidWordFieldValue`.
+## Quick start
+
+```cpp
+#include <conllu.hpp>
+#include <print>
+
+using namespace tg;
+
+auto parsed = conllu::Parser{}.parse_file("en_ewt-ud-test.conllu");
+if (!parsed) {
+    std::println(stderr, "parse failed: {}", parsed.error().message());
+    return 1;
+}
+std::unique_ptr<conllu::Treebank> treebank = std::move(*parsed);
+
+for (const conllu::Sentence* sentence : treebank->sentences()) {
+    std::println("{}: {}", sentence->get_sent_id(), sentence->get_text());
+
+    for (const conllu::Token* token : sentence->tokens()) {
+        const auto form = token->get_field_value("FORM").value_or("_");
+        const auto deprel = token->get_field_value("DEPREL").value_or("_");
+        if (const auto head = token->get_head())
+            std::println("  {} --{}--> {}", form, deprel, (*head)->get_field_value("FORM").value_or("_"));
+        else
+            std::println("  {} ({})", form, deprel);
+    }
+}
+
+if (const std::error_code err = conllu::Writer{}.write_file(treebank.get(), "out.conllu"))
+    std::println(stderr, "write failed: {}", err.message());
+```
+
+## Data model
+
+```
+Treebank                      columns (ordered names) + sentences (in file order)
+└── Sentence                  sent_id, text, metadata (# key = value lines)
+    ├── empty nodes 0.1, 0.2  sentence-level empty nodes, before the first token
+    ├── Token 1, 2, 3, …      one field per column; HEAD resolves to another Token
+    │   └── empty nodes N.1…  empty nodes attached after token N
+    └── Word 1-2, 3-4, …      multiword tokens: a range of 2+ tokens with one surface form
+```
+
+- Everything is owned by its parent and created through it: `Treebank::add_sentence`, `Sentence::add_token`, `Sentence::add_word`, `Sentence::add_empty_node`, `Token::add_empty_node`. The API hands out raw, non-owning pointers.
+- A `Treebank` cannot be copied or moved; keep it in the `std::unique_ptr` that parsing returns, or create one with `std::make_unique<conllu::Treebank>()`.
+- Collections (`sentences()`, `tokens()`, `words()`, `empty_nodes()`, `fields()`, `metadata()`) are lazy views. Don't keep a view, or a pointer obtained from one, across a call that removes elements.
+
+## Rules the library enforces
+
+- **Columns.** Without a leading `# global.columns = …` line, a treebank gets the 10 standard columns (`ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC`). Column names are uppercase ASCII letters with at most one inner `:` (e.g. `PARSEME:MWE`). Any set of columns works, but `ID`, `FORM`, `HEAD`, `MISC`, and `FEATS` have special meaning when present.
+- **Sentences.** Every sentence needs a `# sent_id = …` line. The ID must be non-empty, contain no spaces, tabs, line breaks, or `/`, and be unique in the treebank.
+- **Token IDs** are 1-based and consecutive. They are assigned by `add_token()` and renumbered by `remove_token()`; the `ID` field can't be set directly (`ImmutableTokenField`).
+- **HEAD** is `0` (root) or the ID of a token in the same sentence, and never the token itself. Set it with `Token::set_head(id)`; setting the `HEAD` field goes through the same check. `get_head()` returns `std::nullopt` for the root and for an unset HEAD.
+- **Empty nodes** (`N.M`) come right after token `N`, numbered from 1 with no gaps; sentence-level ones (`0.M`) come before the first token and before any multiword token line. Their HEAD must be `_`; their relations live in `DEPS`. Empty nodes can't have empty nodes of their own.
+- **Multiword tokens** (`first-last`) span at least two tokens, appear before their first token, and must not overlap. Apart from the range they may only carry `FORM`, `MISC`, and `FEATS` = `Typo=Yes`.
+- Parsing validates every sentence. `validate()` on a `Treebank`, `Sentence`, `Token`, or `Word` checks structures you have built or edited by hand.
+
+## Behavior worth knowing
+
+- **`_` means unset.** On input, a field that is exactly `_` becomes `std::nullopt` (`get_field_value` returns `std::nullopt`), and unset fields are written back as `_`. `ParserOptions` and `WriterOptions` let you change this character via `empty_value_indicator`.
+- **Streams are passed by rvalue reference** (`Parser::parse(std::istream&&)`, `Writer::write(const Treebank*, std::ostream&&)`). Pass a temporary (`std::ofstream("out.conllu")`) or `std::move` an existing stream; it is only written to, not moved from: `conllu::Writer{}.write(tb.get(), std::move(std::cout))`.
+- **`sent_id` and `text` are also metadata entries.** They appear in `metadata()` and `get_metadata("text")`; change them with `set_sent_id()` and `set_text()`. `set_metadata()` only adds new keys and returns `DuplicateSentenceMetaEntry` for an existing one.
+- **Metadata order is not preserved.** Sentences, tokens, words, and empty nodes keep their order, but `# key = value` lines come out in unspecified order.
+- **The writer always emits a `# global.columns = …` header**, even for the standard columns. That makes its output CoNLL-U Plus, and it reads back as the same column set.
+- **Input tolerance.** `\n` and `\r\n` line endings, repeated blank lines between sentences, and a missing final newline are all accepted.
+- **`remove_token(id)` refuses** (`InvalidTokenHead`) if another token's HEAD points at it, unless `skip_dependency_validation = true`, which clears those heads. Later tokens, their HEADs, their empty nodes, and the ranges of multiword tokens are renumbered; a multiword token left with fewer than two tokens is removed.
+
+## Streaming
+
+`StreamParser` builds a treebank from input you feed in chunks of any size — useful for sockets, decompressors, or a browser/WASM bridge. `Parser` is a thin wrapper around it.
+
+```cpp
+conllu::StreamParser parser;  // or conllu::StreamParser{conllu::ParserOptions{...}}
+
+char buffer[4096];
+while (source.read(buffer, sizeof buffer) || source.gcount() > 0) {
+    if (const std::error_code err = parser.feed({buffer, static_cast<std::size_t>(source.gcount())})) {
+        std::println(stderr, "{} (sentence starting at line {})", err.message(), parser.error_line());
+        return 1;
+    }
+    // parser.treebank() already holds every sentence completed so far.
+}
+
+auto result = parser.finish();  // parses a final sentence that has no trailing blank line
+```
+
+- Chunks may split lines (and `\r\n`) anywhere; the chunk's memory is not kept after `feed` returns.
+- A sentence is added as soon as the blank line that ends it has been fed. `treebank()` only ever contains complete sentences: one that fails halfway is rolled back.
+- The first error is sticky: every later `feed()` and `finish()` returns it. `error()` and `error_line()` (1-based, the first line of the failing sentence) describe it, the partial result stays in `treebank()`, and `reset()` clears everything.
+- After a successful `finish()` the parser is reset and can be reused for another input.
+
+## Building a treebank
+
+```cpp
+auto treebank = std::make_unique<conllu::Treebank>();
+for (const std::string_view column :
+     {"ID", "FORM", "LEMMA", "UPOS", "XPOS", "FEATS", "HEAD", "DEPREL", "DEPS", "MISC"})
+    treebank->add_column(column).value();  // columns first: tokens get one field per column
+
+conllu::Sentence* sentence = treebank->add_sentence("s1", "Hello world").value();
+
+conllu::Token* hello = sentence->add_token().value();  // ID 1 (IDs are assigned, never set)
+conllu::Token* world = sentence->add_token().value();  // ID 2
+
+(void)hello->set_field_value("FORM", "Hello");
+(void)hello->set_head(0);  // 0 = root
+(void)hello->set_field_value("DEPREL", "root");
+
+(void)world->set_field_value("FORM", "world");
+(void)world->set_head(hello->get_id());
+(void)world->set_field_value("DEPREL", "vocative");
+
+if (const std::error_code err = treebank->validate())
+    std::println(stderr, "invalid: {}", err.message());
+
+(void)conllu::Writer{}.write(treebank.get(), std::move(std::cout));
+```
+
+Add the columns before adding tokens: a token gets one field per column that exists at the time, and `add_column()` later extends every existing token and empty node with an unset field.
+
+## Errors
+
+Functions that can fail return `std::error_code` (empty on success) or `std::expected<T, std::error_code>`. `conllu::ErrorCode` is registered as an error-code enum, so you can compare directly and get a readable message:
+
+```cpp
+auto result = conllu::Parser{}.parse_memory("# sent_id = s1\n1\tA\t_\n");
+if (!result && result.error() == conllu::ErrorCode::TokenFieldCountMismatch)
+    std::println("{}", result.error().message());  // "token field count mismatch"
+```
+
+The codes, by area:
+
+- I/O and resources: `StreamError`, `InsufficientMemory`, `InvalidPointer`, `PositionOutOfRange`
+- Columns: `InvalidColumnsLine`, `InvalidColumnName`, `DuplicateColumnName`, `ColumnNotFound`
+- Sentences and metadata: `SentenceMustStartWithMetaLine`, `InvalidSentenceMetaLine`, `InvalidSentenceMetaKey`, `DuplicateSentenceMetaEntry`, `MissingSentenceId`, `InvalidSentenceId`, `DuplicateSentenceId`, `SentenceIdCannotBeRemoved`, `SentenceNotFoundInTreebank`
+- Tokens and empty nodes: `InvalidTokenId`, `TokenFieldCountMismatch`, `ImmutableTokenField`, `TokenEmptyNodeMismatch`, `NodeNotFoundInToken`, `InvalidTokenHead`, `TokenNotFoundInSentence`, `InvalidNumberOfFields`
+- Multiword tokens: `InvalidWordRange`, `OverlappingWordRange`, `WordNotFoundInSentence`, `WordMustAppearBeforeToken`, `InvalidWordFieldValue`
+
+## Headers
+
+- [conllu.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu.hpp): Umbrella header; includes everything below.
+- [conllu/parser.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/parser.hpp): `Parser`, which parses complete input: `parse(std::istream&&)`, `parse_file(path)`, `parse_memory(std::string_view)`, and `parse_memory(const T* bytes, size)` for any 1-byte `T`. Each returns `std::expected<std::unique_ptr<Treebank>, std::error_code>`.
+- [conllu/stream_parser.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/stream_parser.hpp): `ParserOptions` and `StreamParser`: `feed(chunk)`, `finish()`, `reset()`, `treebank()`, `num_lines()`, `error()`, `error_line()`.
+- [conllu/writer.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/writer.hpp): `WriterOptions` and `Writer`: `write(treebank, std::ostream&&)` and `write_file(treebank, path)`.
+- [conllu/treebank.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/treebank.hpp): `Treebank`. Columns: `columns()`, `num_columns()`, `get_column_pos(name)`, `get_column_name(pos)`, `add_column(name)`. Sentences: `sentences()`, `num_sentences()`, `add_sentence(sent_id, text = {})`, `get_sentence_by_id(sent_id)`, `remove_sentence(sent_id | Sentence*)`. State: `empty()`, `clear()`, `validate()`.
+- [conllu/sentence.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/sentence.hpp): `Sentence`. Identity: `get_sent_id()`, `set_sent_id()`, `get_text()`, `set_text()`. Tokens: `tokens()`, `num_tokens()`, `get_token_by_id(id)`, `add_token()`, `remove_token(id | Token*, skip_dependency_validation = false)`, `remove_all_tokens()`. Multiword tokens: `words()`, `num_words()`, `add_word(first, last)`, `remove_word(word, remove_tokens = false)`, `remove_all_words(remove_tokens = false)`. Sentence-level empty nodes: `empty_nodes()`, `empty_node_count()`, `add_empty_node()`, `remove_empty_node(id | Token*)`, `remove_all_empty_nodes()`. Metadata: `metadata()`, `num_metadata_entries()`, `get_metadata(key)`, `set_metadata(key, value = {})`, `set_metadata_from_comment_line(line)`, `unset_metadata(key)`, `remove_all_metadata()`. State: `empty()`, `clear()`, `validate()`.
+- [conllu/token.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/token.hpp): `Token` (a token or an empty node) and `TokenId` (`std::uint64_t`). Identity: `get_id()` (for an empty node, the number after the dot), `sentence()`, `is_empty_node()`, `get_parent()` (the owning token; `nullptr` for tokens and for `0.M` nodes), `get_word()`, `is_in_word()`. HEAD: `get_head()`, `set_head(id)`. Fields: `fields()`, `num_fields()`, `get_field_value(pos | name)`, `set_field_value(pos | name, value)`, `unset_field_value(pos | name)`. Empty nodes: `empty_nodes()`, `empty_node_count()`, `add_empty_node()`, `remove_empty_node(id | Token*)`, `remove_all_empty_nodes()`. `validate()`.
+- [conllu/word.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/word.hpp): `Word` (a multiword token) and `Word::Range` (inclusive `[first, last]` with `count()`, `contains()`, `overlaps()`, `equals()`, `is_valid()`). Range: `first_id()`, `last_id()`, `set_range()`. Fields: `get_form()`/`set_form()`/`unset_form()`, `get_misc()`/`set_misc()`/`unset_misc()`, `get_typo()`/`set_typo()`/`unset_typo()`. Tokens: `tokens()`, `num_tokens()`, `contains_token(Token*)`, `contains_token_id(id)`. `validate()`.
+- [conllu/error.hpp](https://github.com/tugrulgungor/CoNLL-U/blob/main/include/conllu/error.hpp): `ErrorCode`, `ErrorCategory`, `get_error_category()`, `make_error_code()`, and the `std::is_error_code_enum` specialization.
+
+## Optional
+
+- [Tests](https://github.com/tugrulgungor/CoNLL-U/tree/main/tests): GoogleTest suites per module (`tests/<module>/`); configure with `-DBUILD_TESTS=ON` and run `ctest`. They are the most precise reference for edge-case behavior.
+- [Bundled treebanks](https://github.com/tugrulgungor/CoNLL-U/tree/main/tests/.data): UD test sets for German (HDT), English (GUM, LittlePrince), Russian (Taiga), and Turkish (BOUN), used by the tests and the demo.
+- [Web demo](https://github.com/tugrulgungor/CoNLL-U/tree/main/demo): A CoNLL-U viewer compiled to WebAssembly with Emscripten (`scripts/demo-web.sh`, `-DBUILD_DEMO=ON`).
+- [Single-header build](https://github.com/tugrulgungor/CoNLL-U/blob/main/scripts/amalgamate.py): `python amalgamate.py` (run from `scripts/`) writes `single_header/conllu.hpp`.
