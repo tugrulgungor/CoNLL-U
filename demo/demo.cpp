@@ -75,6 +75,19 @@ static std::string jsonify_token_fields(const conllu::Token *token) {
     return out;
 }
 
+static std::string jsonify_empty_nodes(auto &&nodes) {
+    std::string out;
+
+    for (const conllu::Token *node : nodes) {
+        if (!out.empty())
+            out.push_back(',');
+
+        out.append(std::format(R"json({{"fields":[{}]}})json", jsonify_token_fields(node)));
+    }
+
+    return out;
+}
+
 static std::string jsonify(const conllu::Treebank *treebank) {
     const std::size_t num_columns = treebank->num_columns();
 
@@ -121,12 +134,12 @@ static std::string jsonify(const conllu::Treebank *treebank) {
                 }
 
                 if (form_idx == idx) {
-                    words.append(std::format(R"str("{}")str", word->get_form().value_or("_")));
+                    append_escaped(words, word->get_form().value_or("_"));
                     continue;
                 }
 
                 if (misc_idx == idx) {
-                    words.append(std::format(R"str("{}")str", word->get_misc().value_or("_")));
+                    append_escaped(words, word->get_misc().value_or("_"));
                     continue;
                 }
 
@@ -145,33 +158,36 @@ static std::string jsonify(const conllu::Treebank *treebank) {
             if (!tokens.empty())
                 tokens.push_back(',');
 
-            std::string empty_nodes;
-            for (const conllu::Token *node : token->empty_nodes()) {
-                if (!empty_nodes.empty())
-                    empty_nodes.push_back(',');
-
-                empty_nodes.append(std::format(R"json({{"fields":[{}]}})json", jsonify_token_fields(node)));
-            }
-
-            tokens.append(
-            std::format(R"json({{"fields":[{}],"empty_nodes":[{}]}})json", jsonify_token_fields(token), empty_nodes));
+            tokens.append(std::format(R"json({{"fields":[{}],"empty_nodes":[{}]}})json", jsonify_token_fields(token),
+                                      jsonify_empty_nodes(token->empty_nodes())));
         }
 
         if (!sentences.empty())
             sentences.push_back(',');
 
-        sentences.append(
-        std::format(R"json({{"metadata":[{}],"words":[{}],"tokens":[{}]}})json", metadata, words, tokens));
+        sentences.append(std::format(R"json({{"metadata":[{}],"empty_nodes":[{}],"words":[{}],"tokens":[{}]}})json",
+                                     metadata, jsonify_empty_nodes(sentence->empty_nodes()), words, tokens));
     }
 
     return std::format(R"json({{"ok":true,"columns":[{}],"sentences":[{}]}})json", columns, sentences);
 }
 
+static std::string jsonify_error(const std::error_code err, const std::size_t line) {
+    std::string message;
+    append_escaped(message, err.message());
+
+    return std::format(R"json({{"ok":false,"error":{},"line":{}}})json", message, line);
+}
+
 static std::string parse_conllu_file(const std::string &text) {
-    conllu::Parser parser{};
-    auto res = parser.parse_memory(text);
+    conllu::StreamParser parser{};
+
+    if (const std::error_code err = parser.feed(text))
+        return jsonify_error(err, parser.error_line());
+
+    auto res = parser.finish();
     if (!res)
-        return std::format(R"json({{"ok":false,"error":"{}"}})json", res.error().message());
+        return jsonify_error(res.error(), parser.error_line());
 
     std::unique_ptr<conllu::Treebank> treebank = std::move(res.value());
     return jsonify(treebank.get());

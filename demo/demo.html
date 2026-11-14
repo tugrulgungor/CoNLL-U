@@ -746,7 +746,8 @@
           const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
           if (!result || result.ok !== true) {
-            showError(file.name, (result && result.error) ? result.error : 'Unknown parsing error.');
+            const message = (result && result.error) ? result.error : 'Unknown parsing error.';
+            showError(file.name, (result && result.line) ? message + ' (sentence starting at line ' + result.line + ')' : message);
             return;
           }
           currentFileName = file.name;
@@ -941,6 +942,11 @@
         let rowsHtml = '';
 
         if (currentView === 'tokens') {
+          (sentence.empty_nodes || []).forEach(function (en) {
+            const enFields = padFields(en.fields, columns.length);
+            rowsHtml += '<tr class="row-empty">' + enFields.map(function (f) { return '<td>' + escapeHtml(f) + '</td>'; }).join('') + '</tr>';
+          });
+
           const tokens = sentence.tokens || [];
           tokens.forEach(function (token) {
             const fields = padFields(token.fields, columns.length);
