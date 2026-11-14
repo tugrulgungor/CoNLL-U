@@ -5,7 +5,7 @@
 **A modern, header-only C++23 library for reading, editing, and writing [Universal Dependencies](https://universaldependencies.org) treebanks.**
 
 [![Version](https://img.shields.io/badge/version-0.1.0-orange)](https://github.com/tugrulgungor/CoNLL-U/releases)
-[![Tests](https://img.shields.io/github/actions/workflow/status/tugrulgungor/CoNLL-U/release.yml?label=tests)](https://github.com/tugrulgungor/CoNLL-U/actions/workflows/release.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/tugrulgungor/CoNLL-U/tests.yml?branch=v0-dev&label=tests)](https://github.com/tugrulgungor/CoNLL-U/actions/workflows/tests.yml)
 [![C++23](https://img.shields.io/badge/C%2B%2B-23-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/23)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE.MIT)
 

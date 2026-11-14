@@ -1,0 +1,30 @@
+name: tests.yml
+on:
+  push:
+    branches: [ v0-dev ]
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ g++-14, clang++-18 ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installing GTest
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev ninja-build
+
+      - name: Configuring CMake
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DBUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Running tests (ctest)
+        run: ctest --test-dir build --output-on-failure --no-tests=error
