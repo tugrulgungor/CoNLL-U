@@ -30,10 +30,75 @@ namespace tg::conllu {
         }
     }
 
-    inline std::error_code Writer::write_sentence_(std::ostream& output, const Sentence* sentence) const noexcept {
+    inline std::error_code Writer::write_document_(std::ostream& output, const Document* document) const noexcept {
+        // Document comments are read back from between `# newdoc` and `# newpar`: with comments, both markers are
+        // written even when the document or its first paragraph is implicit.
+        const bool has_comments = !document->metadata_.empty();
+
         try {
-            for (const auto& [key, value] : sentence->metadata_)
-                write_(output << "# " << key << " = " << value << "\n");
+            bool first_sentence{true};
+            for (const std::unique_ptr<Paragraph>& paragraph : document->paragraphs_) {
+                // Empty documents and paragraphs have no sentence to carry their marker: they are skipped.
+                if (paragraph->sentences_.empty())
+                    continue;
+
+                const Document* doc_marker =
+                first_sentence && (document->explicit_ || has_comments) ? document : nullptr;
+                const Paragraph* par_marker =
+                paragraph->explicit_ || (first_sentence && has_comments) ? paragraph.get() : nullptr;
+
+                first_sentence = false;
+
+                for (const std::unique_ptr<Sentence>& sentence : paragraph->sentences_) {
+                    if (const auto err = write_sentence_(output, sentence.get(), doc_marker, par_marker))
+                        return err;
+
+                    doc_marker = nullptr;
+                    par_marker = nullptr;
+                }
+            }
+
+            return {};
+        }
+        catch (...) {
+            return make_error_code(ErrorCode::StreamError);
+        }
+    }
+
+    inline void Writer::write_comment_(std::ostream& output, const std::string_view key,
+                                       const std::string_view value) noexcept(false) {
+        if (value.empty())
+            write_(output << "# " << key << "\n");
+        else
+            write_(output << "# " << key << " = " << value << "\n");
+    }
+
+    inline std::error_code Writer::write_sentence_(std::ostream& output, const Sentence* sentence,
+                                                   const Document* document,
+                                                   const Paragraph* paragraph) const noexcept {
+        try {
+            const auto write_markers = [&output, document, paragraph] {
+                if (nullptr != document) {
+                    write_comment_(output, document->id_.empty() ? "newdoc" : "newdoc id", document->id_);
+
+                    for (const auto& [key, value] : document->metadata_)
+                        write_comment_(output, key, value);
+                }
+
+                if (nullptr != paragraph)
+                    write_comment_(output, paragraph->id_.empty() ? "newpar" : "newpar id", paragraph->id_);
+            };
+
+            const std::size_t leading = std::min(sentence->leading_comments_, sentence->metadata_.size());
+            for (std::size_t i{0}; i < sentence->metadata_.size(); ++i) {
+                if (leading == i)
+                    write_markers();
+
+                write_comment_(output, sentence->metadata_[i].first, sentence->metadata_[i].second);
+            }
+
+            if (leading == sentence->metadata_.size())
+                write_markers();
 
             for (const Token* node : sentence->empty_nodes()) {
                 if (const auto err = write_token_(output, node))
@@ -158,8 +223,8 @@ namespace tg::conllu {
         if (const auto err = write_columns_(stream, treebank))
             return err;
 
-        for (const std::unique_ptr<Sentence>& sentence : treebank->sentences_) {
-            if (const auto err = write_sentence_(stream, sentence.get()))
+        for (const std::unique_ptr<Document>& document : treebank->documents_) {
+            if (const auto err = write_document_(stream, document.get()))
                 return err;
         }
 

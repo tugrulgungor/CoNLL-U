@@ -39,12 +39,12 @@ TEST(Parser, StandardColumnsAndContent) {
 }
 
 TEST(Parser, MetadataLines) {
-    auto treebank = parse_ok("# newdoc id = d1\n# sent_id = s1\n# text = A\n# flag\n" + row("1", "A", "0", "root"));
+    auto treebank = parse_ok("# genre = news\n# sent_id = s1\n# text = A\n# flag\n" + row("1", "A", "0", "root"));
     ASSERT_TRUE(treebank);
 
     const Sentence* s = first_sentence(treebank.get());
     EXPECT_EQ("s1", s->get_sent_id());
-    EXPECT_EQ("d1", s->get_metadata("newdoc id"));
+    EXPECT_EQ("news", s->get_metadata("genre"));
     EXPECT_EQ("", s->get_metadata("flag"));
     EXPECT_EQ(4u, s->num_metadata_entries());
 }

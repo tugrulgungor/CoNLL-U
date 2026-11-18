@@ -28,6 +28,19 @@ namespace tg::conllu {
         internal::trim_start(value);
     }
 
+    inline constexpr auto Sentence::find_metadata_(const std::string_view key) noexcept {
+        return std::ranges::find(metadata_, key, &std::pair<std::string, std::string>::first);
+    }
+
+    inline constexpr auto Sentence::find_metadata_(const std::string_view key) const noexcept {
+        return std::ranges::find(metadata_, key, &std::pair<std::string, std::string>::first);
+    }
+
+    inline constexpr void Sentence::move_metadata_to_back_(const std::string_view key) noexcept {
+        if (const auto it = find_metadata_(key); metadata_.end() != it)
+            std::rotate(it, std::next(it), metadata_.end());
+    }
+
     inline constexpr std::optional<std::error_code> Sentence::set_known_metadata_(
     const std::string_view key, const std::string_view value) noexcept {
         if ("sent_id" == key)
@@ -35,6 +48,9 @@ namespace tg::conllu {
 
         if ("text" == key)
             return set_text(value);
+
+        if ("newdoc" == key || "newdoc id" == key || "newpar" == key || "newpar id" == key)
+            return make_error_code(ErrorCode::ReservedMetaKey);
 
         return std::nullopt;
     }
@@ -53,8 +69,6 @@ namespace tg::conllu {
         if (treebank_->sentence_idx_.end() == it)
             return make_error_code(ErrorCode::SentenceNotFoundInTreebank);
 
-        const std::size_t idx = it->second;
-
         std::pair<std::string, std::string> temp{};
         try {
             if (sent_id.size() < temp.first.capacity()) {
@@ -65,7 +79,7 @@ namespace tg::conllu {
             temp.first.assign(sent_id);
             temp.second.assign(sent_id);
 
-            treebank_->sentence_idx_.emplace(temp.second, idx);
+            treebank_->sentence_idx_.emplace(temp.second, this);
         }
         catch (...) {
             return make_error_code(ErrorCode::InsufficientMemory);
@@ -74,7 +88,8 @@ namespace tg::conllu {
         treebank_->sentence_idx_.erase(sent_id_);
 
         sent_id_.swap(temp.second);
-        metadata_["sent_id"].swap(temp.first);
+        if (const auto entry = find_metadata_("sent_id"); metadata_.end() != entry)
+            entry->second.swap(temp.first);
 
         return {};
     }
@@ -113,6 +128,10 @@ namespace tg::conllu {
         return treebank_;
     }
 
+    inline constexpr Paragraph* Sentence::paragraph() const noexcept {
+        return paragraph_;
+    }
+
     // Identity
     inline constexpr std::string_view Sentence::get_sent_id() const noexcept {
         return sent_id_;
@@ -133,7 +152,10 @@ namespace tg::conllu {
             std::string new_text;
             new_text.assign(text);
 
-            metadata_["text"] = new_text;
+            if (const auto entry = find_metadata_("text"); metadata_.end() != entry)
+                entry->second = new_text;
+            else
+                metadata_.emplace_back("text", new_text);
 
             text_.swap(new_text);
             return {};
@@ -392,7 +414,7 @@ namespace tg::conllu {
     }
 
     inline constexpr std::optional<std::string_view> Sentence::get_metadata(const std::string_view key) const noexcept {
-        if (const auto it = metadata_.find(key); metadata_.end() != it)
+        if (const auto it = find_metadata_(key); metadata_.end() != it)
             return it->second;
 
         return std::nullopt;
@@ -403,14 +425,14 @@ namespace tg::conllu {
         if (key.empty())
             return make_error_code(ErrorCode::InvalidSentenceMetaKey);
 
-        if (metadata_.contains(key))
+        if (metadata_.end() != find_metadata_(key))
             return make_error_code(ErrorCode::DuplicateSentenceMetaEntry);
 
         if (const auto err_opt = set_known_metadata_(key, value); err_opt.has_value())
             return err_opt.value();
 
         try {
-            metadata_.emplace(key, value);
+            metadata_.emplace_back(key, value);
             return {};
         }
         catch (...) {
@@ -440,8 +462,12 @@ namespace tg::conllu {
         if ("sent_id" == key)
             return make_error_code(ErrorCode::SentenceIdCannotBeRemoved);
 
-        if (const auto it = metadata_.find(key); metadata_.end() != it)
+        if (const auto it = find_metadata_(key); metadata_.end() != it) {
+            if (static_cast<std::size_t>(std::distance(metadata_.begin(), it)) < leading_comments_)
+                --leading_comments_;
+
             metadata_.erase(it);
+        }
 
         if ("text" == key)
             text_.clear();
@@ -450,6 +476,11 @@ namespace tg::conllu {
     }
 
     inline constexpr void Sentence::remove_all_metadata() noexcept {
+        // Only `sent_id` remains: it stays before the markers if it was there.
+        const auto sent_id = find_metadata_("sent_id");
+        leading_comments_ =
+        static_cast<std::size_t>(std::distance(metadata_.begin(), sent_id)) < leading_comments_ ? 1 : 0;
+
         std::erase_if(
         metadata_, [](const std::pair<std::string, std::string>& entry) -> bool { return "sent_id" != entry.first; });
 

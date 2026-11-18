@@ -154,7 +154,41 @@ namespace tg::conllu {
          * @brief A word line set a field it is not permitted to carry (only ID, FORM, MISC, and a `Typo=Yes` FEATS
          * flag are allowed on a word line).
          */
-        InvalidWordFieldValue
+        InvalidWordFieldValue,
+
+        /**
+         * @brief A comment key is reserved and cannot be set as a plain comment: `newdoc` and `newpar` (both with and
+         * without ` id`) are document and paragraph boundaries, and `sent_id` and `text` belong to the sentence.
+         */
+        ReservedMetaKey,
+        /**
+         * @brief A document id failed validation (e.g. it contains a line break).
+         */
+        InvalidDocumentId,
+        /**
+         * @brief A paragraph id failed validation (e.g. it contains a line break).
+         */
+        InvalidParagraphId,
+        /**
+         * @brief No document with the given pointer exists in the treebank.
+         */
+        DocumentNotFoundInTreebank,
+        /**
+         * @brief No paragraph with the given pointer exists in the document.
+         */
+        ParagraphNotFoundInDocument,
+        /**
+         * @brief The given sentence does not belong to the document.
+         */
+        SentenceNotFoundInDocument,
+        /**
+         * @brief The given sentence does not belong to the paragraph.
+         */
+        SentenceNotFoundInParagraph,
+        /**
+         * @brief A merge was requested on the last document of a treebank or the last paragraph of a document.
+         */
+        NothingToMerge
     };
 
     /**

@@ -15,6 +15,7 @@
 #ifndef TG_CONLLU_TREEBANK_HPP
 #define TG_CONLLU_TREEBANK_HPP 1
 
+#include "conllu/document.hpp"
 #include "conllu/error.hpp"
 #include "conllu/internal/string_hash.hpp"
 #include "conllu/sentence.hpp"
@@ -38,9 +39,18 @@ namespace tg::conllu {
         std::vector<std::string_view> column_views_{};
         std::unordered_map<std::string_view, std::size_t, internal::StringHash, std::equal_to<>> column_idx_{};
 
-        std::vector<std::unique_ptr<Sentence>> sentences_{};
-        std::unordered_map<std::string_view, std::size_t, internal::StringHash, std::equal_to<>> sentence_idx_{};
+        std::vector<std::unique_ptr<Document>> documents_{};
+        std::unordered_map<std::string_view, Sentence*, internal::StringHash, std::equal_to<>> sentence_idx_{};
+        std::size_t num_sentences_{0};
 
+        [[nodiscard]] constexpr std::expected<Document*, std::error_code> add_document_(bool is_explicit) noexcept;
+        [[nodiscard]] constexpr std::expected<Sentence*, std::error_code> insert_sentence_(
+        Paragraph* paragraph, std::string_view sent_id, std::string_view text) noexcept;
+        // Drops the paragraph's sentences from the index and the count, before the paragraph is destroyed.
+        constexpr void forget_sentences_(const Paragraph* paragraph) noexcept;
+
+        friend class Document;
+        friend class Paragraph;
         friend class Sentence;
         friend class StreamParser;
         friend class Token;
@@ -97,11 +107,39 @@ namespace tg::conllu {
         constexpr std::expected<std::size_t, std::error_code> add_column(std::string_view name) noexcept;
         /** @} */
         /**
+         * @name Documents
+         * Every sentence belongs to exactly one paragraph of one document. See Document and Paragraph for which of
+         * them are marked in the file.
+         */
+        /** @{ */
+        /**
+         * @brief View over the documents, in order.
+         */
+        [[nodiscard]] constexpr auto documents() const noexcept;
+        /**
+         * @brief Number of documents in the treebank.
+         */
+        [[nodiscard]] constexpr std::size_t num_documents() const noexcept;
+        /**
+         * @brief Constructs a new, empty, explicit document and appends it to the treebank.
+         * @param[in] id Document id; std::nullopt or empty for a bare `# newdoc`.
+         * @return Pointer to the newly created document, or an error_code on failure.
+         */
+        [[nodiscard]] constexpr std::expected<Document*, std::error_code> add_document(
+        std::optional<std::string_view> id = std::nullopt) noexcept;
+        /**
+         * @brief Removes the given document and its sentences.
+         * @param[in] document Pointer to the document to remove.
+         * @return Empty error_code on success, or an error describing the failure.
+         */
+        constexpr std::error_code remove_document(const Document* document) noexcept;
+        /** @} */
+        /**
          * @name Sentences
          */
         /** @{ */
         /**
-         * @brief View over the sentences, in treebank order.
+         * @brief View over the sentences of all documents, in treebank order.
          * @return A lazy view yielding a non-owning `Sentence*` for each sentence in the treebank.
          */
         [[nodiscard]] constexpr auto sentences() const noexcept;
@@ -110,7 +148,8 @@ namespace tg::conllu {
          */
         [[nodiscard]] constexpr std::size_t num_sentences() const noexcept;
         /**
-         * @brief Constructs and appends a new sentence.
+         * @brief Constructs a new sentence and appends it to the last paragraph of the last document, creating an
+         * implicit document and paragraph if there are none.
          * @param[in] sent_id Unique identifier for the sentence.
          * @param[in] text Optional sentence text (`# text` metadata).
          * @return Pointer to the newly created sentence, or an error_code on failure.
@@ -142,11 +181,11 @@ namespace tg::conllu {
          */
         /** @{ */
         /**
-         * @brief Whether the treebank contains no sentences.
+         * @brief Whether the treebank contains no sentences (it may still hold empty documents).
          */
         [[nodiscard]] constexpr bool empty() const noexcept;
         /**
-         * @brief Removes all columns and sentences, resetting the treebank to its default-constructed state.
+         * @brief Removes all columns, documents and sentences, resetting the treebank to its default-constructed state.
          */
         constexpr void clear() noexcept;
         /**
@@ -180,6 +219,8 @@ namespace tg::conllu {
     };
 } // namespace tg::conllu
 
+#include "conllu/impl/document.ipp"
+#include "conllu/impl/paragraph.ipp"
 #include "conllu/impl/sentence.ipp"
 #include "conllu/impl/token.ipp"
 #include "conllu/impl/treebank.ipp"

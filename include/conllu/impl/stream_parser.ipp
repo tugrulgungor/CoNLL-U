@@ -80,19 +80,8 @@ namespace tg::conllu {
         }
 
         std::error_code err{};
-        if (!block_lines_.empty()) {
-            const std::size_t num_sentences = treebank_->num_sentences();
-
+        if (!block_lines_.empty())
             err = parse_sentence_(block_lines_, treebank_.get());
-
-            // parse_sentence_ adds the sentence before parsing its tokens: roll a half-built one back, so the
-            // treebank only ever holds complete sentences.
-            if (err && treebank_->num_sentences() > num_sentences) {
-                const Sentence* partial =
-                *std::ranges::next(treebank_->sentences().begin(), static_cast<std::ptrdiff_t>(num_sentences));
-                [[maybe_unused]] const auto _ = treebank_->remove_sentence(partial);
-            }
-        }
 
         clear_block_();
 
@@ -151,21 +140,125 @@ namespace tg::conllu {
     }
     inline std::error_code StreamParser::parse_sentence_(std::vector<std::string_view>& lines,
                                                          Treebank* treebank) const noexcept {
-        std::size_t num_meta_lines = count_sentence_meta_lines_(lines);
-        const std::optional<std::string_view> sent_id = find_sentence_sent_id_(lines, num_meta_lines);
+        const std::size_t num_meta_lines = count_sentence_meta_lines_(lines);
+        const auto sent_id = find_sentence_sent_id_(lines, num_meta_lines);
         if (!sent_id.has_value())
             return make_error_code(ErrorCode::MissingSentenceId);
 
-        const auto sent_res = treebank->add_sentence(sent_id.value());
-        if (!sent_res)
-            return sent_res.error();
+        // Boundary markers: `# newdoc` / `# newdoc id = ...` and `# newpar` / `# newpar id = ...`.
+        std::optional<std::size_t> newdoc{};
+        std::optional<std::size_t> newpar{};
+        std::string_view doc_id{};
+        std::string_view par_id{};
+        for (std::size_t i{0}; i < num_meta_lines; ++i) {
+            std::string_view line = lines[i];
+            std::string_view key;
+            std::string_view value;
+            Sentence::split_metadata_line_(line, key, value);
 
-        Sentence* sentence = sent_res.value();
+            const bool is_doc = "newdoc" == key || "newdoc id" == key;
+            if (!is_doc && "newpar" != key && "newpar id" != key)
+                continue;
+
+            std::optional<std::size_t>& at = is_doc ? newdoc : newpar;
+            if (at.has_value())
+                return make_error_code(ErrorCode::DuplicateSentenceMetaEntry);
+
+            at = i;
+            (is_doc ? doc_id : par_id) = key.ends_with(" id") ? value : std::string_view();
+        }
+
+        // On failure, everything this block created is removed again, so the treebank only ever holds complete
+        // sentences.
+        const std::size_t num_documents = treebank->documents_.size();
+        Document* last_document = treebank->documents_.empty() ? nullptr : treebank->documents_.back().get();
+        const std::size_t num_paragraphs =
+        nullptr == last_document ? std::size_t{0} : last_document->paragraphs_.size();
+
+        Sentence* sentence{nullptr};
+        const auto fail = [&](const std::error_code err) noexcept {
+            if (nullptr != sentence) {
+                [[maybe_unused]] const auto _ = treebank->remove_sentence(sentence);
+            }
+
+            if (nullptr != last_document) {
+                while (last_document->paragraphs_.size() > num_paragraphs)
+                    last_document->paragraphs_.pop_back();
+            }
+
+            while (treebank->documents_.size() > num_documents)
+                treebank->documents_.pop_back();
+
+            return err;
+        };
+
+        Document* document = last_document;
+        if (newdoc.has_value() || nullptr == document) {
+            const auto res = newdoc.has_value() ? treebank->add_document(doc_id) : treebank->add_document_(false);
+            if (!res)
+                return fail(res.error());
+
+            document = res.value();
+        }
+
+        Paragraph* paragraph = document->paragraphs_.empty() ? nullptr : document->paragraphs_.back().get();
+        if (newpar.has_value() || nullptr == paragraph) {
+            const auto res = newpar.has_value() ? document->add_paragraph(par_id) : document->add_paragraph_(false);
+            if (!res)
+                return fail(res.error());
+
+            paragraph = res.value();
+        }
+
+        const auto sent_res = paragraph->add_sentence(sent_id->second);
+        if (!sent_res)
+            return fail(sent_res.error());
+
+        sentence = sent_res.value();
+
+        // The lines between `# newdoc` and a following `# newpar` are document comments.
+        const bool has_doc_comments = newdoc.has_value() && newpar.has_value() && *newdoc < *newpar;
+
+        // Sentence comments before the first marker are written before it again.
+        const std::size_t first_marker = std::min(newdoc.value_or(num_meta_lines), newpar.value_or(num_meta_lines));
+
         std::size_t line_idx{0};
         while (line_idx < num_meta_lines) {
-            const std::string_view line = lines[line_idx++];
+            const std::size_t i = line_idx++;
+            const std::string_view line = lines[i];
+
+            // add_sentence already stored `sent_id`: move it to its place in the comment order.
+            if (sent_id->first == i) {
+                sentence->move_metadata_to_back_("sent_id");
+                if (i < first_marker)
+                    ++sentence->leading_comments_;
+
+                continue;
+            }
+
+            if (newdoc == i || newpar == i)
+                continue;
+
+            if (has_doc_comments && *newdoc < i && i < *newpar) {
+                std::string_view rest = line;
+                std::string_view key;
+                std::string_view value;
+                Sentence::split_metadata_line_(rest, key, value);
+
+                if ("text" != key) {
+                    if (const auto err = document->set_metadata_from_comment_line(line))
+                        return fail(err);
+
+                    continue;
+                }
+            }
+
+            const std::size_t num_entries = sentence->metadata_.size();
             if (const auto err = sentence->set_metadata_from_comment_line(line))
-                return err;
+                return fail(err);
+
+            if (i < first_marker && sentence->metadata_.size() > num_entries)
+                ++sentence->leading_comments_;
         }
 
         Token* last_token{nullptr};
@@ -176,15 +269,18 @@ namespace tg::conllu {
 
             const auto res = parse_token_(treebank, sentence, last_token, line);
             if (!res)
-                return res.error();
+                return fail(res.error());
 
             last_token = res.value();
         }
 
         if (lines.size() != line_idx)
-            return make_error_code(ErrorCode::InvalidPointer);
+            return fail(make_error_code(ErrorCode::InvalidPointer));
 
-        return sentence->validate();
+        if (const auto err = sentence->validate())
+            return fail(err);
+
+        return {};
     }
 
     inline std::size_t StreamParser::count_sentence_meta_lines_(const std::vector<std::string_view>& lines) noexcept {
@@ -200,8 +296,8 @@ namespace tg::conllu {
         return count;
     }
 
-    inline std::optional<std::string_view> StreamParser::find_sentence_sent_id_(std::vector<std::string_view>& lines,
-                                                                                std::size_t& limit) noexcept {
+    inline std::optional<std::pair<std::size_t, std::string_view>> StreamParser::find_sentence_sent_id_(
+    const std::vector<std::string_view>& lines, const std::size_t limit) noexcept {
         for (std::size_t i{0}; i < limit; ++i) {
             std::string_view line = lines[i];
 
@@ -210,14 +306,8 @@ namespace tg::conllu {
 
             Sentence::split_metadata_line_(line, key, value);
 
-            if ("sent_id" == key) {
-                auto it = lines.begin();
-                std::advance(it, i);
-                lines.erase(it);
-
-                --limit;
-                return value;
-            }
+            if ("sent_id" == key)
+                return std::pair{i, value};
         }
 
         return std::nullopt;

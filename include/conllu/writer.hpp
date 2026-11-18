@@ -42,7 +42,13 @@ namespace tg::conllu {
         WriterOptions options_{};
 
         [[nodiscard]] static std::error_code write_columns_(std::ostream& output, const Treebank* treebank) noexcept;
-        [[nodiscard]] std::error_code write_sentence_(std::ostream& output, const Sentence* sentence) const noexcept;
+        [[nodiscard]] std::error_code write_document_(std::ostream& output, const Document* document) const noexcept;
+        static void write_comment_(std::ostream& output, std::string_view key, std::string_view value) noexcept(false);
+        // @p document and @p paragraph are the boundaries starting at @p sentence, written among its comments
+        // (nullptr for none).
+        [[nodiscard]] std::error_code write_sentence_(std::ostream& output, const Sentence* sentence,
+                                                      const Document* document,
+                                                      const Paragraph* paragraph) const noexcept;
         [[nodiscard]] std::error_code write_token_(std::ostream& output, const Token* token) const noexcept;
         [[nodiscard]] std::error_code write_word_(std::ostream& output, const Word* word) const noexcept;
 

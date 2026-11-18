@@ -33,8 +33,8 @@ namespace {
 // Metadata
 
 TEST_F(SentenceTest, MetadataSetGetUnset) {
-    EXPECT_FALSE(sentence_->set_metadata("newdoc id", "doc1"));
-    EXPECT_EQ("doc1", sentence_->get_metadata("newdoc id"));
+    EXPECT_FALSE(sentence_->set_metadata("genre", "news"));
+    EXPECT_EQ("news", sentence_->get_metadata("genre"));
     EXPECT_FALSE(sentence_->set_metadata("flag"));
     EXPECT_EQ("", sentence_->get_metadata("flag"));
     EXPECT_FALSE(sentence_->get_metadata("missing").has_value());
@@ -42,15 +42,15 @@ TEST_F(SentenceTest, MetadataSetGetUnset) {
     EXPECT_EQ(ErrorCode::DuplicateSentenceMetaEntry, sentence_->set_metadata("flag", "again"));
     EXPECT_EQ(ErrorCode::InvalidSentenceMetaKey, sentence_->set_metadata("", "value"));
 
-    EXPECT_FALSE(sentence_->unset_metadata("newdoc id"));
-    EXPECT_FALSE(sentence_->get_metadata("newdoc id").has_value());
+    EXPECT_FALSE(sentence_->unset_metadata("genre"));
+    EXPECT_FALSE(sentence_->get_metadata("genre").has_value());
     EXPECT_FALSE(sentence_->unset_metadata("never-set"));
     EXPECT_EQ(ErrorCode::SentenceIdCannotBeRemoved, sentence_->unset_metadata("sent_id"));
 }
 
 TEST_F(SentenceTest, MetadataFromCommentLine) {
-    EXPECT_FALSE(sentence_->set_metadata_from_comment_line("# newpar id = p1"));
-    EXPECT_EQ("p1", sentence_->get_metadata("newpar id"));
+    EXPECT_FALSE(sentence_->set_metadata_from_comment_line("# s_type = frag"));
+    EXPECT_EQ("frag", sentence_->get_metadata("s_type"));
 
     EXPECT_FALSE(sentence_->set_metadata_from_comment_line("#  spaced   =   value  "));
     EXPECT_EQ("value", sentence_->get_metadata("spaced"));

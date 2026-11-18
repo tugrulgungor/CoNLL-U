@@ -88,8 +88,9 @@ namespace tg::conllu {
 
         [[nodiscard]] static std::size_t count_sentence_meta_lines_(
         const std::vector<std::string_view>& lines) noexcept;
-        [[nodiscard]] static std::optional<std::string_view> find_sentence_sent_id_(
-        std::vector<std::string_view>& lines, std::size_t& limit) noexcept;
+        // Position and value of the `# sent_id` line among the first @p limit lines.
+        [[nodiscard]] static std::optional<std::pair<std::size_t, std::string_view>> find_sentence_sent_id_(
+        const std::vector<std::string_view>& lines, std::size_t limit) noexcept;
 
         [[nodiscard]] std::expected<Token*, std::error_code> parse_token_(const Treebank* treebank, Sentence* sentence,
                                                                           Token* last_token,

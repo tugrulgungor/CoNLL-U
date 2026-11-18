@@ -84,6 +84,39 @@ s1: Don't go.
 
 Empty nodes are reached through `token->empty_nodes()` (`N.1`, `N.2`, …) and `sentence->empty_nodes()` (`0.1`, …). For direct lookups there are `get_sentence_by_id()`, `get_token_by_id()`, and `get_metadata()`.
 
+### Documents and paragraphs
+
+<p align="center"><img src="assets/treebank-structure.svg" alt="A CoNLL-U file next to the treebank, documents, paragraphs, and sentences it is parsed into" width="880"></p>
+
+```cpp
+for (const conllu::Document* document : treebank->documents()) {
+    std::println("{}: {} sentences", document->get_id().value_or("(no id)"), document->num_sentences());
+
+    for (const conllu::Paragraph* paragraph : document->paragraphs())
+        std::println("  paragraph: {} sentences", paragraph->num_sentences());
+}
+```
+
+```text
+GUM_academic_discrimination: 54 sentences
+  paragraph: 2 sentences
+  paragraph: 1 sentences
+  paragraph: 6 sentences
+  …
+```
+
+Every sentence belongs to a paragraph, and every paragraph to a document, as marked by `# newdoc` and `# newpar`. Sentences before the first marker go into an implicit document or paragraph, which is written back without one.
+
+```cpp
+conllu::Document* d1 = treebank->add_document("d1").value();
+conllu::Paragraph* par = d1->add_paragraph().value();
+(void)par->add_sentence("d1-s1", "Hello.");
+conllu::Sentence* bye = par->add_sentence("d1-s2", "Bye.").value();
+
+conllu::Document* d2 = d1->split(bye).value();  // d1-s2 now starts a new document, d2
+(void)d1->merge_next();                         // which joins d1 again
+```
+
 ### Editing
 
 ```cpp
@@ -124,9 +157,9 @@ if (auto err = writer.write_file(treebank.get(), "out.conllu"))
 
 ```text
 # global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC
-# text_es = No vayas.
-# text = Don't go.
 # sent_id = s1
+# text = Don't go.
+# text_es = No vayas.
 1-2	Don't	_	_	_	_	_	_	_	_
 1	Do	do	AUX	_	_	3	aux	_	_
 2	n't	not	PART	_	_	3	advmod	_	_
@@ -134,7 +167,7 @@ if (auto err = writer.write_file(treebank.get(), "out.conllu"))
 4	now	_	_	_	_	3	_	_	_
 ```
 
-Output always declares its columns, so it reads back unchanged. Metadata lines come out in no particular order.
+Output always declares its columns and keeps comment lines in their original order, so it reads back unchanged.
 
 ### Streaming
 

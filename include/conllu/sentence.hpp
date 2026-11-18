@@ -16,16 +16,19 @@
 #define TG_CONLLU_SENTENCE_HPP 1
 
 #include "conllu/error.hpp"
-#include "conllu/internal/string_hash.hpp"
 #include "conllu/word.hpp"
 
+#include <algorithm>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string>
-#include <unordered_map>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace tg::conllu {
+    class Paragraph;
     class Treebank;
 
     /**
@@ -37,7 +40,11 @@ namespace tg::conllu {
         std::string sent_id_{};
         std::string text_{};
 
-        std::unordered_map<std::string, std::string, internal::StringHash, std::equal_to<>> metadata_{};
+        // Comment lines, in file order. An empty value is a bare `# key` line.
+        std::vector<std::pair<std::string, std::string>> metadata_{};
+        // How many of them precede the `# newdoc`/`# newpar` lines when this sentence starts a document or paragraph
+        // (e.g. `# newdoc_id = ...` before `# newpar` in ru_taiga), so that the Writer puts the markers back there.
+        std::size_t leading_comments_{0};
 
         std::vector<std::unique_ptr<Token>> tokens_{};
         std::vector<std::unique_ptr<Word>> words_{};
@@ -49,6 +56,7 @@ namespace tg::conllu {
         Token root_;
 
         Treebank* treebank_;
+        Paragraph* paragraph_{nullptr};
 
         static constexpr void split_metadata_line_(std::string_view& line, std::string_view& key,
                                                    std::string_view& value) noexcept;
@@ -58,11 +66,17 @@ namespace tg::conllu {
 
         [[nodiscard]] constexpr std::error_code set_sent_id_(std::string_view sent_id) noexcept;
 
+        [[nodiscard]] constexpr auto find_metadata_(std::string_view key) noexcept;
+        [[nodiscard]] constexpr auto find_metadata_(std::string_view key) const noexcept;
+        constexpr void move_metadata_to_back_(std::string_view key) noexcept;
+
         constexpr std::expected<Word*, std::error_code> add_word_unsafe_(Word::Range range) noexcept;
         constexpr void remove_empty_words_() noexcept;
 
         explicit(true) constexpr Sentence(Treebank* treebank) noexcept;
 
+        friend class Document;
+        friend class Paragraph;
         friend class StreamParser;
         friend class Token;
         friend class Treebank;
@@ -75,7 +89,8 @@ namespace tg::conllu {
          */
         /** @{ */
         /**
-         * @brief Default construction is disabled; sentences are created via Treebank::add_sentence.
+         * @brief Default construction is disabled; sentences are created via Treebank::add_sentence or
+         * Paragraph::add_sentence.
          */
         constexpr Sentence() noexcept = delete;
         /** @} */
@@ -87,6 +102,10 @@ namespace tg::conllu {
          * @brief Pointer to the treebank that owns this sentence.
          */
         [[nodiscard]] constexpr Treebank* treebank() const noexcept;
+        /**
+         * @brief Pointer to the paragraph that holds this sentence.
+         */
+        [[nodiscard]] constexpr Paragraph* paragraph() const noexcept;
         /** @} */
         /**
          * @name Identity
@@ -244,7 +263,8 @@ namespace tg::conllu {
          */
         /** @{ */
         /**
-         * @brief View over the metadata entries, as key/value pairs.
+         * @brief View over the metadata entries (comment lines), as key/value pairs in file order. A bare `# key` line
+         * has an empty value.
          */
         [[nodiscard]] constexpr auto metadata() const noexcept;
         /**
@@ -259,7 +279,8 @@ namespace tg::conllu {
         [[nodiscard]] constexpr std::optional<std::string_view> get_metadata(std::string_view key) const noexcept;
         /**
          * @brief Adds a new metadata entry.
-         * @param[in] key Metadata key; must be non-empty and not already present.
+         * @param[in] key Metadata key; must be non-empty, not already present, and not a document or paragraph
+         * boundary (`newdoc`, `newpar`, with or without ` id`), which belong to Document and Paragraph.
          * @param[in] value Metadata value.
          * @return Empty error_code on success, or an error describing the failure.
          */

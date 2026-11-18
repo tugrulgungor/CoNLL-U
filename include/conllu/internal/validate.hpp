@@ -18,6 +18,7 @@
 namespace tg::conllu::internal {
     [[nodiscard]] constexpr bool is_column_name_valid(std::string_view name) noexcept;
     [[nodiscard]] constexpr bool is_sent_id_valid(std::string_view sent_id) noexcept;
+    [[nodiscard]] constexpr bool is_boundary_id_valid(std::string_view id) noexcept;
 } // namespace tg::conllu::internal
 
 #include "conllu/internal/impl/validate.ipp"

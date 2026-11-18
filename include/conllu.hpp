@@ -16,7 +16,9 @@
 #ifndef TG_CONLLU_HPP
 #define TG_CONLLU_HPP 1
 
+#include "conllu/document.hpp"
 #include "conllu/error.hpp"
+#include "conllu/paragraph.hpp"
 #include "conllu/parser.hpp"
 #include "conllu/sentence.hpp"
 #include "conllu/stream_parser.hpp"

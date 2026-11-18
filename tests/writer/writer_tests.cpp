@@ -61,7 +61,7 @@ TEST(Writer, RowOrdering) {
     const auto lines = lines_of(write(treebank.get()));
     const std::vector<std::string_view> expected{"0.1\t", "0.2\t", "1-2\t", "1\t", "1.1\t", "2\t", "3\t"};
 
-    // Metadata comes first (in no particular order); rows follow, consecutively, in the expected order.
+    // Metadata comes first; rows follow, consecutively, in the expected order.
     const std::size_t first_row = index_of(lines, "0.1\t");
     ASSERT_LT(first_row, lines.size());
     ASSERT_LT(0u, first_row);
@@ -142,16 +142,42 @@ namespace {
     class WriterDataFile : public ::testing::TestWithParam<DataFile> {};
 } // namespace
 
-TEST_P(WriterDataFile, RowsMatchTheSourceFile) {
+TEST_P(WriterDataFile, MatchesTheSourceFile) {
     const auto path = data_path(GetParam().stem);
     auto treebank = Parser{}.parse_file(path);
     ASSERT_TRUE(treebank.has_value()) << treebank.error().message();
 
-    const auto expected = lines_of(rows_only(read_file(path)));
-    const auto actual = lines_of(rows_only(write(treebank->get())));
+    // The output is the source plus the leading `# global.columns` line, except for line endings and spaces around
+    // a comment's `=` (`#  key  =  value` is read as key "key" and value "value", and written as `# key = value`).
+    std::vector<std::string> expected = lines_of(read_file(path));
+    for (std::string& line : expected) {
+        if (line.ends_with('\r'))
+            line.pop_back();
+
+        if (line.starts_with('#')) {
+            const auto trim = [](std::string_view s) {
+                while (!s.empty() && ' ' == s.front())
+                    s.remove_prefix(1);
+                while (!s.empty() && ' ' == s.back())
+                    s.remove_suffix(1);
+                return std::string(s);
+            };
+            const std::string_view body = std::string_view(line).substr(1);
+            const std::size_t eq = body.find('=');
+            const std::string key = trim(body.substr(0, eq));
+            const std::string value = std::string_view::npos == eq ? std::string() : trim(body.substr(eq + 1));
+            line = value.empty() ? "# " + key : "# " + key + " = " + value;
+        }
+    }
+
+    std::vector<std::string> actual = lines_of(write(treebank->get()));
+    ASSERT_FALSE(actual.empty());
+    EXPECT_TRUE(actual.front().starts_with("# global.columns = "));
+    actual.erase(actual.begin());
+
     ASSERT_EQ(expected.size(), actual.size());
     for (std::size_t i{0}; i < expected.size(); ++i)
-        ASSERT_EQ(expected[i], actual[i]) << "row " << i;
+        ASSERT_EQ(expected[i], actual[i]) << "line " << i + 1;
 }
 
 TEST_P(WriterDataFile, WriteParseWriteIsStable) {
@@ -161,7 +187,7 @@ TEST_P(WriterDataFile, WriteParseWriteIsStable) {
     const std::string out = write(first->get());
     auto second = parse_ok(out);
     ASSERT_TRUE(second);
-    EXPECT_EQ(rows_only(out), rows_only(write(second.get())));
+    EXPECT_EQ(out, write(second.get()));
 }
 
 INSTANTIATE_TEST_SUITE_P(Writer, WriterDataFile, ::testing::ValuesIn(c_data_files),

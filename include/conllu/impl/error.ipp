@@ -82,6 +82,22 @@ namespace tg::conllu {
                 return "word must appear before token";
             case ErrorCode::InvalidWordFieldValue:
                 return "invalid word field value";
+            case ErrorCode::ReservedMetaKey:
+                return "reserved meta key";
+            case ErrorCode::InvalidDocumentId:
+                return "invalid document id";
+            case ErrorCode::InvalidParagraphId:
+                return "invalid paragraph id";
+            case ErrorCode::DocumentNotFoundInTreebank:
+                return "document not found in treebank";
+            case ErrorCode::ParagraphNotFoundInDocument:
+                return "paragraph not found in document";
+            case ErrorCode::SentenceNotFoundInDocument:
+                return "sentence not found in document";
+            case ErrorCode::SentenceNotFoundInParagraph:
+                return "sentence not found in paragraph";
+            case ErrorCode::NothingToMerge:
+                return "nothing to merge";
         }
 
         return "<unknown>";

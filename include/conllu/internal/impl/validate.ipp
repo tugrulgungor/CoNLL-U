@@ -50,6 +50,14 @@ namespace tg::conllu::internal {
 
         return true;
     }
+
+    // A `# newdoc id = ...` / `# newpar id = ...` value: one line, without the surrounding spaces a reader would trim.
+    inline constexpr bool is_boundary_id_valid(const std::string_view id) noexcept {
+        if (id.contains('\n') || id.contains('\r'))
+            return false;
+
+        return id.empty() || (' ' != id.front() && '\t' != id.front() && ' ' != id.back() && '\t' != id.back());
+    }
 } // namespace tg::conllu::internal
 
 #endif // TG_CONLLU_INTERNAL_IMPL_VALIDATE_IPP

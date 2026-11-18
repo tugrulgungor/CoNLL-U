@@ -87,7 +87,7 @@ namespace tg::conllu::tests {
     }
 
     /**
-     * Keeps only token/word/empty-node rows and blank lines (metadata order is not stable across round trips), with
+     * Keeps only token/word/empty-node rows and blank lines, with
      * `\n` line endings (bundled data files are checked out with CRLF on Windows).
      */
     inline std::string rows_only(const std::string_view text) {

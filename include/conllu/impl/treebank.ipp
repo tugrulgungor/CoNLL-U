@@ -15,6 +15,64 @@
 #include "conllu/treebank.hpp"
 
 namespace tg::conllu {
+    inline constexpr std::expected<Document*, std::error_code> Treebank::add_document_(
+    const bool is_explicit) noexcept {
+        try {
+            std::unique_ptr<Document> document(new Document(this, is_explicit));
+
+            Document* ptr = document.get();
+            documents_.push_back(std::move(document));
+
+            return ptr;
+        }
+        catch (...) {
+            return std::unexpected(make_error_code(ErrorCode::InsufficientMemory));
+        }
+    }
+
+    inline constexpr std::expected<Sentence*, std::error_code> Treebank::insert_sentence_(
+    Paragraph* paragraph, const std::string_view sent_id, const std::string_view text) noexcept {
+        if (!internal::is_sent_id_valid(sent_id))
+            return std::unexpected(make_error_code(ErrorCode::InvalidSentenceId));
+
+        if (sentence_idx_.contains(sent_id))
+            return std::unexpected(make_error_code(ErrorCode::DuplicateSentenceId));
+
+        try {
+            std::unique_ptr<Sentence> sentence(new Sentence(this));
+            sentence->paragraph_ = paragraph;
+            sentence->sent_id_.assign(sent_id);
+            sentence->metadata_.emplace_back("sent_id", sent_id);
+
+            // Mirrored in the metadata, like Sentence::set_text: that is what the Writer outputs.
+            if (!text.empty()) {
+                sentence->text_.assign(text);
+                sentence->metadata_.emplace_back("text", text);
+            }
+
+            paragraph->sentences_.reserve(paragraph->sentences_.size() + std::size_t{1});
+
+            Sentence* ptr = sentence.get();
+            sentence_idx_.emplace(ptr->sent_id_, ptr);
+
+            // Cannot throw: the capacity is reserved.
+            paragraph->sentences_.push_back(std::move(sentence));
+            ++num_sentences_;
+
+            return ptr;
+        }
+        catch (...) {
+            return std::unexpected(make_error_code(ErrorCode::InsufficientMemory));
+        }
+    }
+
+    inline constexpr void Treebank::forget_sentences_(const Paragraph* paragraph) noexcept {
+        for (const std::unique_ptr<Sentence>& sentence : paragraph->sentences_)
+            sentence_idx_.erase(sentence->sent_id_);
+
+        num_sentences_ -= paragraph->sentences_.size();
+    }
+
     // Columns
     inline constexpr const std::vector<std::string_view>& Treebank::columns() const noexcept {
         return column_views_;
@@ -53,15 +111,19 @@ namespace tg::conllu {
 
         // Visits every row that carries fields: sentence-level empty nodes, tokens, and tokens' empty nodes.
         const auto for_each_row = [this](auto&& fn) {
-            for (const std::unique_ptr<Sentence>& sentence : sentences_) {
-                for (const std::unique_ptr<Token>& node : sentence->root_.empty_nodes_)
-                    fn(node.get());
+            for (const std::unique_ptr<Document>& document : documents_) {
+                for (const std::unique_ptr<Paragraph>& paragraph : document->paragraphs_) {
+                    for (const std::unique_ptr<Sentence>& sentence : paragraph->sentences_) {
+                        for (const std::unique_ptr<Token>& node : sentence->root_.empty_nodes_)
+                            fn(node.get());
 
-                for (const std::unique_ptr<Token>& token : sentence->tokens_) {
-                    fn(token.get());
+                        for (const std::unique_ptr<Token>& token : sentence->tokens_) {
+                            fn(token.get());
 
-                    for (const std::unique_ptr<Token>& node : token->empty_nodes_)
-                        fn(node.get());
+                            for (const std::unique_ptr<Token>& node : token->empty_nodes_)
+                                fn(node.get());
+                        }
+                    }
                 }
             }
         };
@@ -96,50 +158,105 @@ namespace tg::conllu {
         }
     }
 
+    // Documents
+    inline constexpr auto Treebank::documents() const noexcept {
+        return std::views::transform(
+        documents_, [](const std::unique_ptr<Document>& document) noexcept -> Document* { return document.get(); });
+    }
+
+    inline constexpr std::size_t Treebank::num_documents() const noexcept {
+        return documents_.size();
+    }
+
+    inline constexpr std::expected<Document*, std::error_code> Treebank::add_document(
+    const std::optional<std::string_view> id) noexcept {
+        if (!internal::is_boundary_id_valid(id.value_or(std::string_view())))
+            return std::unexpected(make_error_code(ErrorCode::InvalidDocumentId));
+
+        const auto res = add_document_(true);
+        if (!res)
+            return res;
+
+        if (const auto err = (*res)->set_id(id)) {
+            documents_.pop_back();
+            return std::unexpected(err);
+        }
+
+        return res;
+    }
+
+    inline constexpr std::error_code Treebank::remove_document(const Document* document) noexcept {
+        if (nullptr == document)
+            return make_error_code(ErrorCode::InvalidPointer);
+
+        const auto it = std::ranges::find(documents_, document, &std::unique_ptr<Document>::get);
+        if (documents_.end() == it)
+            return make_error_code(ErrorCode::DocumentNotFoundInTreebank);
+
+        for (const std::unique_ptr<Paragraph>& paragraph : document->paragraphs_)
+            forget_sentences_(paragraph.get());
+
+        documents_.erase(it);
+
+        return {};
+    }
+
     // Sentences
     inline constexpr auto Treebank::sentences() const noexcept {
-        return std::views::transform(
-        sentences_, [](const std::unique_ptr<Sentence>& sentence) noexcept -> Sentence* { return sentence.get(); });
+        return documents_ |
+               std::views::transform(
+               [](const std::unique_ptr<Document>& document) noexcept
+               -> const std::vector<std::unique_ptr<Paragraph>>& { return document->paragraphs_; }) |
+               std::views::join |
+               std::views::transform(
+               [](const std::unique_ptr<Paragraph>& paragraph) noexcept
+               -> const std::vector<std::unique_ptr<Sentence>>& { return paragraph->sentences_; }) |
+               std::views::join |
+               std::views::transform(
+               [](const std::unique_ptr<Sentence>& sentence) noexcept -> Sentence* { return sentence.get(); });
+    }
+
+    inline constexpr std::size_t Treebank::num_sentences() const noexcept {
+        return num_sentences_;
     }
 
     inline constexpr std::expected<Sentence*, std::error_code> Treebank::add_sentence(
     const std::string_view sent_id, const std::string_view text) noexcept {
+        // Checked here too, so that an invalid id leaves no implicit document or paragraph behind.
         if (!internal::is_sent_id_valid(sent_id))
             return std::unexpected(make_error_code(ErrorCode::InvalidSentenceId));
 
         if (sentence_idx_.contains(sent_id))
             return std::unexpected(make_error_code(ErrorCode::DuplicateSentenceId));
 
-        const std::size_t idx = sentences_.size();
+        const bool new_document = documents_.empty();
+        if (new_document) {
+            if (const auto res = add_document_(false); !res)
+                return std::unexpected(res.error());
+        }
 
-        try {
-            // @TODO: Needs stronger exception safety (rollback).
-            std::unique_ptr<Sentence> sentence(new Sentence(this));
-            sentence->sent_id_.assign(sent_id);
-            sentence->metadata_.emplace("sent_id", sent_id);
+        Document* document = documents_.back().get();
 
-            // Mirrored in the metadata, like Sentence::set_text: that is what the Writer outputs.
-            if (!text.empty()) {
-                sentence->text_.assign(text);
-                sentence->metadata_.emplace("text", text);
+        const bool new_paragraph = document->paragraphs_.empty();
+        if (new_paragraph) {
+            if (const auto res = document->add_paragraph_(false); !res) {
+                if (new_document)
+                    documents_.pop_back();
+
+                return std::unexpected(res.error());
             }
-
-            const auto ptr = sentence.get();
-
-            sentence_idx_.emplace(sentence->sent_id_, idx);
-            sentences_.push_back(std::move(sentence));
-
-            return ptr;
         }
-        catch (...) {
-            sentence_idx_.erase(sent_id);
 
-            return std::unexpected(make_error_code(ErrorCode::InsufficientMemory));
+        const auto res = insert_sentence_(document->paragraphs_.back().get(), sent_id, text);
+        if (!res) {
+            if (new_paragraph)
+                document->paragraphs_.pop_back();
+
+            if (new_document)
+                documents_.pop_back();
         }
-    }
 
-    inline constexpr std::size_t Treebank::num_sentences() const noexcept {
-        return sentences_.size();
+        return res;
     }
 
     inline constexpr std::optional<Sentence*> Treebank::get_sentence_by_id(
@@ -148,8 +265,7 @@ namespace tg::conllu {
         if (sentence_idx_.end() == it)
             return std::nullopt;
 
-        const std::size_t idx = it->second;
-        return sentences_[idx].get();
+        return it->second;
     }
 
     inline constexpr std::error_code Treebank::remove_sentence(const std::string_view sent_id) noexcept {
@@ -157,18 +273,12 @@ namespace tg::conllu {
         if (sentence_idx_.end() == it)
             return make_error_code(ErrorCode::SentenceNotFoundInTreebank);
 
-        const std::size_t idx = it->second;
-
-        auto sent_it = sentences_.begin();
-        std::advance(sent_it, idx);
-        sent_it = sentences_.erase(sent_it);
+        Paragraph* paragraph = it->second->paragraph_;
+        const auto sent_it = std::ranges::find(paragraph->sentences_, it->second, &std::unique_ptr<Sentence>::get);
 
         sentence_idx_.erase(it);
-
-        while (sent_it != sentences_.end()) {
-            sentence_idx_[sent_it->get()->sent_id_] -= std::size_t{1};
-            sent_it = std::next(sent_it);
-        }
+        paragraph->sentences_.erase(sent_it);
+        --num_sentences_;
 
         return {};
     }
@@ -177,7 +287,7 @@ namespace tg::conllu {
         if (nullptr == sentence)
             return make_error_code(ErrorCode::InvalidPointer);
 
-        if (std::ranges::any_of(sentences(), [sentence](const Sentence* s) noexcept -> bool { return sentence == s; }))
+        if (const auto it = sentence_idx_.find(sentence->sent_id_); sentence_idx_.end() != it && sentence == it->second)
             return remove_sentence(sentence->sent_id_);
 
         return make_error_code(ErrorCode::SentenceNotFoundInTreebank);
@@ -185,7 +295,7 @@ namespace tg::conllu {
 
     // State
     inline constexpr bool Treebank::empty() const noexcept {
-        return sentences_.empty();
+        return std::size_t{0} == num_sentences_;
     }
 
     inline constexpr void Treebank::clear() noexcept {
@@ -194,7 +304,8 @@ namespace tg::conllu {
         columns_.clear();
 
         sentence_idx_.clear();
-        sentences_.clear();
+        documents_.clear();
+        num_sentences_ = std::size_t{0};
     }
 
     inline constexpr std::error_code Treebank::validate() const noexcept {
