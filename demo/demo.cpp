@@ -68,6 +68,23 @@ namespace {
         return out;
     }
 
+    void append_metadata(std::string& out, auto&& metadata) {
+        out += '[';
+        bool first{true};
+        for (const auto& [key, value] : metadata) {
+            if (!first)
+                out += ',';
+            first = false;
+
+            out += R"({"key":)";
+            append_escaped(out, key);
+            out += R"(,"value":)";
+            append_escaped(out, value);
+            out += '}';
+        }
+        out += ']';
+    }
+
     void append_row(std::string& out, const std::string_view kind, const std::string_view id, auto&& fields) {
         if ('[' != out.back())
             out += ',';
@@ -96,6 +113,11 @@ class Session final {
     conllu::StreamParser parser_{};
     std::unique_ptr<conllu::Treebank> treebank_{};
     std::vector<conllu::Sentence*> sentences_{};
+    std::vector<conllu::Document*> documents_{};
+
+    // Position of each sentence (by index in sentences_): its document, and its paragraph within that document.
+    std::vector<std::size_t> document_of_{};
+    std::vector<std::size_t> paragraph_of_{};
 
     conllu::Sentence* sentence_at_(const int idx) const {
         if (idx < 0 || static_cast<std::size_t>(idx) >= sentences_.size())
@@ -118,8 +140,13 @@ class Session final {
                 empty_nodes += token->empty_node_count();
         }
 
-        return std::format(R"({{"sentences":{},"tokens":{},"words":{},"empty_nodes":{}}})", sentences_.size(), tokens,
-                           words, empty_nodes);
+        std::size_t paragraphs{0};
+        for (const conllu::Document* document : documents_)
+            paragraphs += document->num_paragraphs();
+
+        return std::format(
+        R"({{"documents":{},"paragraphs":{},"sentences":{},"tokens":{},"words":{},"empty_nodes":{}}})",
+        documents_.size(), paragraphs, sentences_.size(), tokens, words, empty_nodes);
     }
 
     void append_word_row_(const conllu::Word* word, std::string& out) const {
@@ -215,6 +242,9 @@ public:
         parser_.reset();
         treebank_.reset();
         sentences_.clear();
+        documents_.clear();
+        document_of_.clear();
+        paragraph_of_.clear();
     }
 
     std::string feed(const std::string& chunk) {
@@ -243,7 +273,22 @@ public:
         }
 
         treebank_ = std::move(res.value());
-        sentences_.assign(treebank_->sentences().begin(), treebank_->sentences().end());
+        sentences_.clear();
+        documents_.assign(treebank_->documents().begin(), treebank_->documents().end());
+        document_of_.clear();
+        paragraph_of_.clear();
+
+        for (std::size_t d{0}; d < documents_.size(); ++d) {
+            std::size_t p{0};
+            for (const conllu::Paragraph* paragraph : documents_[d]->paragraphs()) {
+                for (conllu::Sentence* sentence : paragraph->sentences()) {
+                    sentences_.push_back(sentence);
+                    document_of_.push_back(d);
+                    paragraph_of_.push_back(p);
+                }
+                ++p;
+            }
+        }
 
         std::string out = R"({"ok":true,"columns":[)";
         bool first{true};
@@ -254,15 +299,43 @@ public:
             append_escaped(out, column);
         }
 
-        out += R"(],"sentences":[)";
-        const std::size_t form_pos = treebank_->get_column_pos("FORM").value_or(treebank_->num_columns());
+        // Documents and their paragraphs; sentences refer to them by index ("doc", "par").
+        out += R"(],"documents":[)";
         first = true;
-        for (const conllu::Sentence* sentence : sentences_) {
+        for (const conllu::Document* document : documents_) {
             if (!first)
                 out += ',';
             first = false;
 
             out += R"({"id":)";
+            append_optional(out, document->get_id());
+            out += std::format(R"(,"explicit":{},"sentences":{},"paragraphs":[)", document->is_explicit(),
+                               document->num_sentences());
+
+            bool first_par{true};
+            for (const conllu::Paragraph* paragraph : document->paragraphs()) {
+                if (!first_par)
+                    out += ',';
+                first_par = false;
+
+                out += R"({"id":)";
+                append_optional(out, paragraph->get_id());
+                out += std::format(R"(,"explicit":{},"sentences":{}}})", paragraph->is_explicit(),
+                                   paragraph->num_sentences());
+            }
+            out += "]}";
+        }
+
+        out += R"(],"sentences":[)";
+        const std::size_t form_pos = treebank_->get_column_pos("FORM").value_or(treebank_->num_columns());
+        first = true;
+        for (std::size_t i{0}; i < sentences_.size(); ++i) {
+            const conllu::Sentence* sentence = sentences_[i];
+            if (!first)
+                out += ',';
+            first = false;
+
+            out += std::format(R"({{"doc":{},"par":{},"id":)", document_of_[i], paragraph_of_[i]);
             append_escaped(out, sentence->get_sent_id());
             out += R"(,"text":)";
 
@@ -294,21 +367,24 @@ public:
         std::string out = std::format(R"({{"ok":true,"index":{},"sent_id":)", idx);
         append_escaped(out, sentence->get_sent_id());
 
-        out += R"(,"metadata":[)";
-        bool first{true};
-        for (const auto& [key, value] : sentence->metadata()) {
-            if (!first)
-                out += ',';
-            first = false;
+        const std::size_t doc_idx = document_of_[static_cast<std::size_t>(idx)];
+        const std::size_t par_idx = paragraph_of_[static_cast<std::size_t>(idx)];
+        const conllu::Document* document = documents_[doc_idx];
+        const conllu::Paragraph* paragraph = sentence->paragraph();
 
-            out += R"({"key":)";
-            append_escaped(out, key);
-            out += R"(,"value":)";
-            append_escaped(out, value);
-            out += '}';
-        }
+        out += std::format(R"(,"document":{{"index":{},"id":)", doc_idx);
+        append_optional(out, document->get_id());
+        out += std::format(R"(,"explicit":{},"metadata":)", document->is_explicit());
+        append_metadata(out, document->metadata());
 
-        out += R"(],"rows":[)";
+        out += std::format(R"(}},"paragraph":{{"index":{},"id":)", par_idx);
+        append_optional(out, paragraph->get_id());
+        out += std::format(R"(,"explicit":{}}})", paragraph->is_explicit());
+
+        out += R"(,"metadata":)";
+        append_metadata(out, sentence->metadata());
+
+        out += R"(,"rows":[)";
 
         for (const conllu::Token* node : sentence->empty_nodes())
             append_row(out, "empty", std::format("0.{}", node->get_id()), node->fields());
